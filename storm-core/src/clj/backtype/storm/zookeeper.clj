@@ -15,17 +15,17 @@
 ;; limitations under the License.
 
 (ns backtype.storm.zookeeper
-  (:import [org.apache.curator.retry RetryNTimes])
-  (:import [org.apache.curator.framework.api CuratorEvent CuratorEventType CuratorListener UnhandledErrorListener])
-  (:import [org.apache.curator.framework CuratorFramework CuratorFrameworkFactory])
-  (:import [org.apache.zookeeper ZooKeeper Watcher KeeperException$NoNodeException
-            ZooDefs ZooDefs$Ids CreateMode WatchedEvent Watcher$Event Watcher$Event$KeeperState
-            Watcher$Event$EventType KeeperException$NodeExistsException])
-  (:import [org.apache.zookeeper.data Stat])
-  (:import [org.apache.zookeeper.server ZooKeeperServer NIOServerCnxnFactory])
-  (:import [java.net InetSocketAddress BindException])
+  ;(:import [org.apache.curator.retry RetryNTimes])
+  ;(:import [org.apache.curator.framework.api CuratorEvent CuratorEventType CuratorListener UnhandledErrorListener])
+  ;(:import [org.apache.curator.framework CuratorFramework CuratorFrameworkFactory])
+  ;(:import [org.apache.zookeeper ZooKeeper Watcher KeeperException$NoNodeException
+  ;          ZooDefs ZooDefs$Ids CreateMode WatchedEvent Watcher$Event Watcher$Event$KeeperState
+  ;Watcher$Event$EventType KeeperException$NodeExistsException])
+  ;(:import [org.apache.zookeeper.data Stat])
+  ;(:import [org.apache.zookeeper.server ZooKeeperServer NIOServerCnxnFactory])
+  ;(:import [java.net InetSocketAddress BindException])
   (:import [java.io File])
-  (:import [backtype.storm.utils Utils ZookeeperAuthInfo])
+  (:import [backtype.storm.utils Utils])
   (:import [backtype.storm.sharedcontext Client ShareContext ContextListener])
   (:use [backtype.storm util log config]))
 
@@ -37,8 +37,6 @@
    3 :node-data-changed
    4 :node-children-changed})
 
-(ShareContext/init)
-
 
 (defn- default-watcher
   [state type path]
@@ -49,11 +47,12 @@
    :root ""
    :watcher default-watcher
    :auth-conf nil]
-  (let [client (Client. (ShareContext.)
+  (let [client (Client. root (ShareContext.)
                  (reify
                    ContextListener
                    (^void method [this ^int type ^String path]
                      (watcher :connected (zk-event-types type) path))))]
+    ;(let [fk (Utils/newCurator conf servers port root (when auth-conf (ZookeeperAuthInfo. auth-conf)))]
     ;;(.. fk
     ;    (getCuratorListenable)
      ;   (addListener
@@ -82,14 +81,14 @@
     client))
 
 (def zk-create-modes
-  {:ephemeral CreateMode/EPHEMERAL
-   :persistent CreateMode/PERSISTENT
-   :sequential CreateMode/PERSISTENT_SEQUENTIAL})
+  {:ephemeral 1
+   :persistent 2
+   :sequential 3})
 
 (defn create-node
   ([^Client zk ^String path ^bytes data mode]
    (try
-     (.CreateNode zk (normalize-path path) data)
+     (.CreateNode zk (normalize-path path) data (zk-create-modes mode))
      (catch Exception e (throw (wrap-in-runtime e)))))
   ([^Client zk ^String path ^bytes data]
    (create-node zk path data :persistent)))
@@ -103,8 +102,6 @@
 (defnk delete-node
   [^Client zk ^String path :force false]
   (try-cause  (.deleteNode zk (normalize-path path) force)
-             (catch KeeperException$NoNodeException e
-               (when-not force (throw e)))
              (catch Exception e (throw (wrap-in-runtime e)))))
 
 (defn mkdirs
@@ -114,7 +111,7 @@
       (mkdirs zk (parent-path path))
       (try-cause
         (create-node zk path (barr 7) :persistent)
-        (catch KeeperException$NodeExistsException e
+        (catch Exception e
           ;; this can happen when multiple clients doing mkdir at same time
           ))
       )))
@@ -124,10 +121,8 @@
   (let [path (normalize-path path)]
     (try-cause
       (if (exists-node? zk path watch?)
-        (.getData zk path watch?))
-      (catch KeeperException$NoNodeException e
-        ;; this is fine b/c we still have a watch from the successful exists call
-        nil )
+        (.getData zk path watch?)
+        nil)
       (catch Exception e (throw (wrap-in-runtime e))))))
 
 (defn get-data-with-version 
@@ -138,7 +133,7 @@
                 (.getData zk (normalize-path path) watch?))]
       {:data data
        :version (.getVersion zk (normalize-path path) false)})
-      (catch KeeperException$NoNodeException e
+      (catch Exception e
         ;; this is fine b/c we still have a watch from the successful exists call
         nil )))
 
@@ -153,15 +148,13 @@
 (defn get-children
   [^Client zk ^String path watch?]
   (try
-    (if watch?
-      (.. zk (getChildren) (watched) (forPath (normalize-path path)))
-      (.. zk (getChildren) (forPath (normalize-path path))))
+    (into [] (.getChildren zk path watch?))
     (catch Exception e (throw (wrap-in-runtime e)))))
 
 (defn set-data
   [^Client zk ^String path ^bytes data]
   (try
-    (.setData zk path data true)
+    (.setData zk path data)
     (catch Exception e (throw (wrap-in-runtime e)))))
 
 (defn exists
@@ -170,29 +163,16 @@
 
 (defn delete-recursive
   [^Client zk ^String path]
-  (.deleteNode zk (normalize-path path) true))
+  (.deleteRecursively zk (normalize-path path) true))
 
 
 (defnk mk-inprocess-zookeeper
   [localdir :port nil]
-  (let [localfile (File. localdir)
-        zk (ZooKeeperServer. localfile localfile 2000)
-        [retport factory]
-        (loop [retport (if port port 2000)]
-          (if-let [factory-tmp
-                   (try-cause
-                     (doto (NIOServerCnxnFactory.)
-                       (.configure (InetSocketAddress. retport) 0))
-                     (catch BindException e
-                       (when (> (inc retport) (if port port 65535))
-                         (throw (RuntimeException.
-                                  "No port is available to launch an inprocess zookeeper.")))))]
-            [retport factory-tmp]
-            (recur (inc retport))))]
-    (log-message "Starting inprocess zookeeper at port " retport " and dir " localdir)
-    (.startup factory zk)
-    [retport factory]))
+  (ShareContext/init)
+  [nil nil]
+  )
 
 (defn shutdown-inprocess-zookeeper
   [handle]
-  (.shutdown handle))
+  (ShareContext/shutDown)
+  )

@@ -73,12 +73,7 @@
        [this path data]
        (zk/mkdirs zk (parent-path path))
        (if (zk/exists zk path false)
-         (try-cause
-           (zk/set-data zk path data) ; should verify that it's ephemeral
-           (catch KeeperException$NoNodeException e
-             (log-warn-error e "Ephemeral node disappeared between checking for existing and setting data")
-             (zk/create-node zk path data :ephemeral)
-             ))
+         (zk/set-data zk path data)
          (zk/create-node zk path data :ephemeral)))
 
      (create-sequential
