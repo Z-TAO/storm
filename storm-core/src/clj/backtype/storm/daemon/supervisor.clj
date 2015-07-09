@@ -141,7 +141,7 @@
                            :timed-out
                          true
                            :valid)]
-              (log-debug "Worker " id " is " state ": " (pr-str hb) " at supervisor time-secs " now)
+              (log-message "Worker " id " is " state ": " (pr-str hb) " at supervisor time-secs " now)
               [id [state hb]]
               ))
      )))
@@ -254,9 +254,9 @@
     ;; 5. launch new workers (give worker-id, port, and supervisor-id)
     ;; 6. wait for workers launch
 
-    (log-debug "Syncing processes")
-    (log-debug "Assigned executors: " assigned-executors)
-    (log-debug "Allocated: " allocated)
+    (log-message "Syncing processes")
+    (log-message "Assigned executors: " assigned-executors)
+    (log-message "Allocated: " allocated)
     (doseq [[id [state heartbeat]] allocated]
       (when (not= :valid state)
         (log-message
@@ -329,8 +329,8 @@
         disallowed (keys (filter-val
                                   (fn [[state _]] (= state :disallowed))
                                   allocated))]
-    (log-debug "Allocated workers " allocated)
-    (log-debug "Disallowed workers " disallowed)
+    (log-message "Allocated workers " allocated)
+    (log-message "Disallowed workers " disallowed)
     (doseq [id disallowed]
       (shutdown-worker supervisor id))
     ))
@@ -358,11 +358,11 @@
                               (filter-key #(.confirmAssigned isupervisor %)))
           assigned-storm-ids (assigned-storm-ids-from-port-assignments new-assignment)
           ]
-      (log-debug "Synchronizing supervisor")
-      (log-debug "Storm code map: " storm-code-map)
-      (log-debug "Downloaded storm ids: " downloaded-storm-ids)
-      (log-debug "All assignment: " all-assignment)
-      (log-debug "New assignment: " new-assignment)
+      (log-message "Synchronizing supervisor")
+      (log-message "Storm code map: " storm-code-map)
+      (log-message "Downloaded storm ids: " downloaded-storm-ids)
+      (log-message "All assignment: " all-assignment)
+      (log-message "New assignment: " new-assignment)
 
       ;; download code first
       ;; This might take awhile
@@ -373,7 +373,7 @@
                    (assigned-storm-ids storm-id))
           (download-storm-code conf storm-id master-code-dir download-lock)))
 
-      (log-debug "Writing new assignment "
+      (log-message "Writing new assignment "
                  (pr-str new-assignment))
       (doseq [p (set/difference (set (keys existing-assignment))
                                 (set (keys new-assignment)))]

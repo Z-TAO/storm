@@ -21,7 +21,7 @@
   (:use [backtype.storm config util])
   (:use [clojure test])
 )
-
+(comment
 (deftest test-new-curator-uses-exponential-backoff
   (let [expected_interval 2400
         expected_retries 10
@@ -40,7 +40,7 @@
     (is (= (.getN retry) expected_retries))
     (is (= (.getSleepTimeMs retry 10 0) expected_ceiling))
   )
-)
+))
 
 (deftest test-getConfiguredClient-throws-RunTimeException-on-bad-config
   (let [storm-conf (merge (read-storm-config)
@@ -72,3 +72,4 @@
   (is (= 10100 (secs-to-millis-long 10.1)))
 )
 
+(run-tests)

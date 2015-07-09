@@ -339,7 +339,7 @@ public class Utils {
     }
     
     
-    public static CuratorFramework newCurator(Map conf, List<String> servers, Object port, String root) {
+    /*public static CuratorFramework newCurator(Map conf, List<String> servers, Object port, String root) {
         return newCurator(conf, servers, port, root, null);
     }
 
@@ -377,7 +377,7 @@ public class Utils {
         CuratorFramework ret = newCurator(conf, servers, port);
         ret.start();
         return ret;
-    }    
+    }    */
     
     /**
      *

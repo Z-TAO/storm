@@ -31,7 +31,6 @@
 ;; Testing TODO:
 ;; * Test that it repeats the meta for a partitioned state (test partitioned emitter on its own)
 ;; * Test that partitioned state emits nothing for the partition if it has seen a future transaction for that partition (test partitioned emitter on its own)
-
 (defn mk-coordinator-state-changer [atom]
   (TransactionalSpoutCoordinator.
    (reify ITransactionalSpout
@@ -212,13 +211,13 @@
 
 
     ;; test that transactions are independent
-    
+
     (.execute bolt (test-tuple [attempt1-1]))
     (.execute bolt (test-tuple [attempt1-1]))
     (.execute bolt (test-tuple [attempt1-2]))
     (.execute bolt (test-tuple [attempt2-1]))
     (.execute bolt (test-tuple [attempt1-1]))
-    
+
     (finish! bolt attempt1-1)
 
     (verify-bolt-and-reset! {:ack [[attempt1-1] [attempt1-1] [attempt1-2]
@@ -234,7 +233,7 @@
 
     (finish! bolt attempt1-2)
     (verify-bolt-and-reset! {"default" [[attempt1-2 2]]}
-                            capture-atom)  
+                            capture-atom)
     ))
 
 (defn mk-state-initializer [atom]
@@ -282,7 +281,7 @@
 
       (is (nil? (get-state-or-create strict-rotating 5 initializer)))
       (is (= 20 (get-state-or-create strict-rotating 5 initializer)))
-      (is (nil? (get-state-or-create strict-rotating 6 initializer)))        
+      (is (nil? (get-state-or-create strict-rotating 6 initializer)))
       (cleanup-before strict-rotating 6)
       (is (= 1 (count (.list state "strict"))))
 
@@ -362,7 +361,7 @@
        (-> builder
            (.setBolt "gcommit" (CountingCommitBolt.) 1)
            (.globalGrouping "spout"))
-       
+
        (-> builder
            (.setBolt "sum" (KeyedSummingBatchBolt.) 2)
            (.fieldsGrouping "id1" (Fields. ["word"])))
@@ -377,7 +376,7 @@
            (.fieldsGrouping "count" (Fields. ["key"])))
 
        (bind builder (.buildTopologyBuilder builder))
-       
+
        (-> builder
            (.setBolt "controller" controller 1)
            (.directGrouping "count2" Constants/COORDINATED_STREAM_ID)
@@ -393,7 +392,7 @@
                                 2 [["happy" 11]
                                    ["mango" 2]
                                    ["zebra" 1]]})
-       
+
        (bind topo-info (tracked-captured-topology
                         cluster
                         (.createTopology builder)))
@@ -473,7 +472,7 @@
                                    ["e" 7]
                                    ["c" 11]]
                                 3 [["a" 2]]})
-       
+
        (ack-tx! 1)
        (tracked-wait topo-info 1)
        (verify! {"sum" [[3 "a" 5]
@@ -516,7 +515,7 @@
                  "gcommit" []})
        (ack-tx! 2)
        (tracked-wait topo-info 1)
-       
+
        (verify! {"sum" []
                  "count" [[2 "apple" 1]
                           [2 "dog" 1]
@@ -526,10 +525,10 @@
                            [2 "zebra" 2]]
                  "global" []
                  "gcommit" [[2 3]]})
-       
+
        (ack-tx! 2)
        (ack-tx! 3)
-       
+
        (tracked-wait topo-info 2)
        (verify! {"sum" [[4 "c" 14]]
                  "count" [[3 "a" 3]
@@ -544,7 +543,7 @@
                            [3 "e" 2]]
                  "global" [[4 2]]
                  "gcommit" [[3 7]]})
-       
+
        (ack-tx! 4)
        (ack-tx! 3)
        (tracked-wait topo-info 2)
@@ -553,7 +552,7 @@
                  "count2" [[4 "c" 2]]
                  "global" [[5 0]]
                  "gcommit" [[4 2]]})
-       
+
        (ack-tx! 5)
        (ack-tx! 4)
        (tracked-wait topo-info 2)
@@ -562,7 +561,7 @@
                  "count2" []
                  "global" [[6 0]]
                  "gcommit" [[5 0]]})
-       
+
        (-> topo-info :capturer .getAndClearResults)
        ))))
 
@@ -590,7 +589,7 @@
                               1 [["d"]
                                  ["c"]]
                               })
-     
+
      (bind results (complete-topology cluster
                                       (.buildTopology builder)
                                       :cleanup-state false))
@@ -604,7 +603,7 @@
                              {0 [["a"]
                                  ["b"]]
                               })
-     
+
      (bind results (complete-topology cluster (.buildTopology builder)))
 
      ;; need to do it this way (check for nothing transaction) because there is one transaction already saved up before that emits nothing (because of how memorytransctionalspout detects partition completion)
@@ -632,7 +631,7 @@
            (.fieldsGrouping "spout" (Fields. ["word"])))
 
        (bind builder (.buildTopologyBuilder builder))
-       
+
        (-> builder
            (.setBolt "controller" controller 1)
            (.directGrouping "spout" Constants/COORDINATED_STREAM_ID)
@@ -643,7 +642,7 @@
                                    ["cat"]
                                    ["apple"]
                                    ["dog"]]})
-       
+
        (bind topo-info (tracked-captured-topology
                         cluster
                         (.createTopology builder)))
@@ -693,7 +692,7 @@
        (tracked-wait topo-info 1)
 
        (verify! {"count" [[1 "dog" 1]
-                          [1 "cat" 1]]})       
+                          [1 "cat" 1]]})
        (ack-tx! 2)
        (ack-tx! 1)
        (tracked-wait topo-info 2)
