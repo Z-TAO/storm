@@ -19,6 +19,8 @@ package storm.trident.topology.state;
 
 
 import backtype.storm.Config;
+import backtype.storm.sharedcontext.Client;
+import backtype.storm.sharedcontext.ShareContext;
 import backtype.storm.utils.Utils;
 import org.apache.curator.framework.CuratorFramework;
 import java.io.UnsupportedEncodingException;
@@ -31,7 +33,7 @@ import org.apache.zookeeper.KeeperException;
 import org.json.simple.JSONValue;
 
 public class TransactionalState {
-    CuratorFramework _curator;
+    Client _curator;
     
     public static TransactionalState newUserState(Map conf, String id) {
         return new TransactionalState(conf, id, "user");
@@ -45,18 +47,19 @@ public class TransactionalState {
         try {
             conf = new HashMap(conf);
             String rootDir = conf.get(Config.TRANSACTIONAL_ZOOKEEPER_ROOT) + "/" + id + "/" + subroot;
-            List<String> servers = (List<String>) getWithBackup(conf, Config.TRANSACTIONAL_ZOOKEEPER_SERVERS, Config.STORM_ZOOKEEPER_SERVERS);
-            Object port = getWithBackup(conf, Config.TRANSACTIONAL_ZOOKEEPER_PORT, Config.STORM_ZOOKEEPER_PORT);
-            CuratorFramework initter = Utils.newCuratorStarted(conf, servers, port);
-            try {
-                initter.create().creatingParentsIfNeeded().forPath(rootDir);
-            } catch(KeeperException.NodeExistsException e)  {
-                
+            //List<String> servers = (List<String>) getWithBackup(conf, Config.TRANSACTIONAL_ZOOKEEPER_SERVERS, Config.STORM_ZOOKEEPER_SERVERS);
+            //Object port = getWithBackup(conf, Config.TRANSACTIONAL_ZOOKEEPER_PORT, Config.STORM_ZOOKEEPER_PORT);
+            Client initter = new Client(new ShareContext(),null);
+            if (rootDir.lastIndexOf("/") == -1){
+                initter.CreateNode(rootDir, null, Client.PERSISTENT);
+            }else {
+                initter.mkdirs(rootDir.substring(0, rootDir.lastIndexOf("/")));
+                initter.CreateNode(rootDir, null, Client.PERSISTENT);
             }
             
             initter.close();
-                                    
-            _curator = Utils.newCuratorStarted(conf, servers, port, rootDir);
+
+            _curator = new Client(rootDir, new ShareContext(), null);
         } catch (Exception e) {
            throw new RuntimeException(e);
         }
@@ -71,13 +74,20 @@ public class TransactionalState {
             throw new RuntimeException(e);
         }
         try {
-            if(_curator.checkExists().forPath(path)!=null) {
-                _curator.setData().forPath(path, ser);
+            if(_curator.Exists(path, false)) {
+                _curator.setData(path, ser);
             } else {
+                if (path.lastIndexOf("/") != -1){
+                    String dir = path.substring(0, path.lastIndexOf("/"));
+                    _curator.mkdirs(dir);
+                }
+                _curator.CreateNode(path, ser, Client.PERSISTENT);
+/*
                 _curator.create()
                         .creatingParentsIfNeeded()
                         .withMode(CreateMode.PERSISTENT)
                         .forPath(path, ser);
+*/
             }
         } catch(Exception e) {
             throw new RuntimeException(e);
@@ -87,7 +97,7 @@ public class TransactionalState {
     public void delete(String path) {
         path = "/" + path;
         try {
-            _curator.delete().forPath(path);
+            _curator.deleteNode(path, true);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -96,10 +106,15 @@ public class TransactionalState {
     public List<String> list(String path) {
         path = "/" + path;
         try {
-            if(_curator.checkExists().forPath(path)==null) {
+            if(_curator.Exists(path, false)) {
                 return new ArrayList<String>();
             } else {
-                return _curator.getChildren().forPath(path);
+                ArrayList<String> l = new ArrayList<String>();
+                String [] children = _curator.getChildren(path, false);
+                for (String child : children) {
+                    l.add(child);
+                }
+                return l;
             }
         } catch(Exception e) {
             throw new RuntimeException(e);
@@ -113,8 +128,8 @@ public class TransactionalState {
     public Object getData(String path) {
         path = "/" + path;
         try {
-            if(_curator.checkExists().forPath(path)!=null) {
-                return JSONValue.parse(new String(_curator.getData().forPath(path), "UTF-8"));
+            if(_curator.Exists(path, false)) {
+                return JSONValue.parse(new String(_curator.getData(path, false), "UTF-8"));
             } else {
                 return null;
             }

@@ -74,7 +74,7 @@
 
       (^String execute
         [this ^String function ^String args]
-        (log-debug "Received DRPC request for " function " " args " at " (System/currentTimeMillis))
+        (log-message "Received DRPC request for " function " " args " at " (System/currentTimeMillis))
         (let [id (str (swap! ctr (fn [v] (mod (inc v) 1000000000))))
               ^Semaphore sem (Semaphore. 0)
               req (DRPCRequest. args id)
@@ -84,12 +84,12 @@
           (swap! id->function assoc id function)
           (swap! id->request assoc id req)
           (.add queue req)
-          (log-debug "Waiting for DRPC result for " function " " args " at " (System/currentTimeMillis))
+          (log-message "Waiting for DRPC result for " function " " args " at " (System/currentTimeMillis))
           (.acquire sem)
-          (log-debug "Acquired DRPC result for " function " " args " at " (System/currentTimeMillis))
+          (log-message "Acquired DRPC result for " function " " args " at " (System/currentTimeMillis))
           (let [result (@id->result id)]
             (cleanup id)
-            (log-debug "Returning DRPC result for " function " " args " at " (System/currentTimeMillis))
+            (log-message "Returning DRPC result for " function " " args " at " (System/currentTimeMillis))
             (if (instance? DRPCExecutionException result)
               (throw result)
               (if (nil? result)
@@ -101,7 +101,7 @@
       (^void result
         [this ^String id ^String result]
         (let [^Semaphore sem (@id->sem id)]
-          (log-debug "Received result " result " for " id " at " (System/currentTimeMillis))
+          (log-message "Received result " result " for " id " at " (System/currentTimeMillis))
           (when sem
             (swap! id->result assoc id result)
             (.release sem))))
@@ -118,7 +118,7 @@
         (let [^ConcurrentLinkedQueue queue (acquire-queue request-queues func)
               ret (.poll queue)]
           (if ret
-            (do (log-debug "Fetched request for " func " at " (System/currentTimeMillis))
+            (do (log-message "Fetched request for " func " at " (System/currentTimeMillis))
               ret)
             (DRPCRequest. "" ""))))
 

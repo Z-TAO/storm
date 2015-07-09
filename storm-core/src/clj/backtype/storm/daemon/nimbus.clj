@@ -363,7 +363,7 @@
          ))))
 
 (defn update-heartbeats! [nimbus storm-id all-executors existing-assignment]
-  (log-debug "Updating heartbeats for " storm-id " " (pr-str all-executors))
+  (log-message "Updating heartbeats for " storm-id " " (pr-str all-executors))
   (let [storm-cluster-state (:storm-cluster-state nimbus)
         executor-beats (.executor-beats storm-cluster-state storm-id (:executor->node+port existing-assignment))
         cache (update-heartbeat-cache (@(:heartbeats-cache nimbus) storm-id)
@@ -380,7 +380,7 @@
 
 (defn- alive-executors
   [nimbus ^TopologyDetails topology-details all-executors existing-assignment]
-  (log-debug "Computing alive executors for " (.getId topology-details) "\n"
+  (log-message "Computing alive executors for " (.getId topology-details) "\n"
              "Executors: " (pr-str all-executors) "\n"
              "Assignment: " (pr-str existing-assignment) "\n"
              "Heartbeat cache: " (pr-str (@(:heartbeats-cache nimbus) (.getId topology-details)))
@@ -699,7 +699,7 @@
             :let [existing-assignment (get existing-assignments topology-id)
                   topology-details (.getById topologies topology-id)]]
       (if (= existing-assignment assignment)
-        (log-debug "Assignment for " topology-id " hasn't changed")
+        (log-message "Assignment for " topology-id " hasn't changed")
         (do
           (log-message "Setting new assignment for topology id " topology-id ": " (pr-str assignment))
           (.set-assignment! storm-cluster-state topology-id assignment)

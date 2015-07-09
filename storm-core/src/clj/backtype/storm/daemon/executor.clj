@@ -368,7 +368,7 @@
   (let [^ISpout spout (:object task-data)
         task-id (:task-id task-data)]
     ;;TODO: need to throttle these when there's lots of failures
-    (log-debug "Failing message " msg-id ": " tuple-info)
+    (log-message "Failing message " msg-id ": " tuple-info)
     (.fail spout msg-id)
     (task/apply-hooks (:user-context task-data) .spoutFail (SpoutFailInfo. msg-id task-id time-delta))
     (when time-delta
@@ -615,7 +615,7 @@
                           ;; TODO: how to handle incremental updates as well as synchronizations at same time
                           ;; TODO: need to version tuples somehow
                           
-                          ;;(log-debug "Received tuple " tuple " at task " task-id)
+                          ;;(log-message "Received tuple " tuple " at task " task-id)
                           ;; need to do it this way to avoid reflection
                           (let [stream-id (.getSourceStreamId tuple)]
                             (condp = stream-id

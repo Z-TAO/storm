@@ -244,6 +244,3 @@
 (deftest test-storm-state-callbacks
   ;; TODO finish
   )
-
-
-

@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Created by tao on 7/5/15.
@@ -26,23 +27,30 @@ public class Client{
     private String sessionId;
 
 
-    public Client(ContextListener cl){
+    public Client(ContextListener cl) throws InterruptedException{
         Init("", new ShareContext(), cl);
     }
-    public Client(ShareContext sc, ContextListener cl){
+    public Client(ShareContext sc, ContextListener cl) throws InterruptedException{
         Init("",sc,cl);
     }
-    public Client(String root, ShareContext sc, ContextListener cl){
-        Init(root,sc,cl);
+    public Client(String root, ShareContext sc, ContextListener cl) throws InterruptedException{
+        Init(root, sc, cl);
     }
 
-    private void Init(String root, ShareContext sc, ContextListener cl){
-        this.ephemeralNodeList = new ArrayList<String>();
+    private void Init(String root, ShareContext sc, ContextListener cl) throws InterruptedException{
+
+        ephemeralNodeList = new ArrayList<String>();
         this.sc = sc;
         this.cl = cl;
         this.root = root;
         //by everytime init, register this object to the server;
-        sessionId = sc.register(this);
+        sessionId = sc.createNewId();
+        LOG.info("Client created with id: " + sessionId);
+        if (cl !=null){
+            sc.clientLists.put(sessionId, cl);
+        }
+        sc.clientRoots.put(sessionId, root);
+        Thread.sleep(0);
     }
     private String getNodeType(int type){
         switch (type){
@@ -76,22 +84,28 @@ public class Client{
     }
 
     public void setData(String path, byte [] data)throws Exception{
+        LOG.debug("set data on " + path + " with client:" + sessionId);
         path = root + parsePath(path);
         sc.setData(path, data);
     }
     public byte [] getData(String path, boolean watch) throws Exception{
         path = root + parsePath(path);
-        return sc.getData(path, watch, sessionId);
+        byte [] data = sc.getData(path, watch, sessionId);
+        LOG.debug("get data on " + path + " with client:" + sessionId + " data:");
+        return data;
     }
-    public int getVersion(String path, boolean watch) throws Exception{
+    public Integer getVersion(String path, boolean watch) throws Exception{
+        LOG.debug("get version on " + path + " with client:" + sessionId);
         path = root + parsePath(path);
         return sc.getVersion(path, watch, sessionId);
     }
     public String [] getChildren(String path, boolean watch) throws Exception{
+        LOG.debug("get children on " + path + " with client:" + sessionId);
         path = root + parsePath(path);
         return sc.getChildren(path, watch, sessionId);
     }
     public boolean Exists(String path, boolean watch) throws Exception{
+        LOG.debug("check exist on " + path + " with client:" + sessionId);
         path = root + parsePath(path);
         return sc.Exists(path, watch, sessionId);
     }
@@ -105,13 +119,42 @@ public class Client{
         LOG.info("Delete children from node " + path);
         sc.deleteAll(path, force);
     }
+    public void mkdirs(String path) throws Exception{
 
-    public void close() throws Exception{
-        LOG.info("client closed.");
+        if (path.compareTo("") == 0){
+            return;
+        }
+        String checkPath = path;
+        while (!Exists(checkPath, false) && checkPath.length() != 0){
+            int li = checkPath.lastIndexOf("/");
+            if (li == -1){
+                checkPath = "";
+                break;
+            }
+            checkPath = checkPath.substring(0,li);
+        }
+        while(checkPath.compareTo(path) !=0){
+            String tmp = path.substring(checkPath.length()+1);
+            if (tmp.indexOf("/") != -1){
+                tmp = tmp.substring(0, tmp.indexOf("/"));
+                checkPath = checkPath + "/" + tmp;
+            }else if (tmp.length() !=0){
+                checkPath = checkPath + "/" + tmp;
+            }
 
+            CreateNode(checkPath, null, PERSISTENT);
+        }
+    }
+
+    public void close(){
+        LOG.info("client "+sessionId+" closed.");
         sc.unregister(sessionId);
         for (String path : ephemeralNodeList) {
-            deleteNode(path, true);
+            try {
+                deleteNode(path, true);
+            }catch (Exception e){
+                //do nothing
+            }
         }
         ephemeralNodeList.clear();
     }
@@ -124,9 +167,10 @@ public class Client{
         }
     }
     public static void main(String[] args) throws Exception {
+        Client cc = new Client("", new ShareContext(), new callback());
+        cc.CreateNode("/happy", null, PERSISTENT);
 
-        ShareContext.init();
-        Client client = new Client( new ShareContext(), new callback());
+        Client client = new Client("/happy", new ShareContext(), new callback());
         System.out.println(client.Exists("/happy/1/2/3", false));
 
         System.out.println(client.CreateNode("/happy", null, PERSISTENT));
@@ -135,13 +179,13 @@ public class Client{
         System.out.println(client.CreateNode("/happy/1/2/3", null, PERSISTENT));
         String [] s = client.getChildren("/", true);
         client.setData("/happy", new byte[]{1, 2, 3});
-        System.out.println(client.Exists("/happy/1/2/3", false));
-        byte [] x = client.getData("/happy/1/2/3", false);
-        byte [] y = client.getData("/happy", false);
-        int v1 = client.getVersion("/happy", false);
-        v1 = client.getVersion("/happy/1", false);
-        v1 = client.getVersion("/happy/1/2", false);
-        v1 = client.getVersion("/happy/1/2/3", false);
+        System.out.println(client.Exists("/happy/1/2/3", true));
+        byte [] x = client.getData("/happy/1/2/3", true);
+        byte [] y = client.getData("/happy", true);
+        int v1 = client.getVersion("/happy", true);
+        v1 = client.getVersion("/happy/1", true);
+        v1 = client.getVersion("/happy/1/2", true);
+        v1 = client.getVersion("/happy/1/2/3", true);
         client.deleteNode("kj/jkgh/hki", true);
         client.deleteNode("/happy/1", false);
         boolean f = client.Exists("/happy", false);

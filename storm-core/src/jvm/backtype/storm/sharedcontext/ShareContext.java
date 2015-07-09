@@ -1,15 +1,11 @@
 package backtype.storm.sharedcontext;
 
-
-import backtype.storm.serialization.types.ArrayListSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.text.DecimalFormat;
-import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.HashSet;
 import java.util.UUID;
-
 
 /**
  * Created by tao on 7/5/15.
@@ -19,18 +15,27 @@ public class ShareContext {
     //this is the tree structure
     private static final Logger LOG = LoggerFactory.getLogger(ShareContext.class);
     public static Node root = null;
-    public static final DecimalFormat df = new DecimalFormat("00000000");
-    public static Hashtable<String, Integer> seqTable = new Hashtable<String, Integer>();
+    public static DecimalFormat df = null;
+    public static Hashtable<String, Integer> seqTable = null;
 
-    private static Hashtable<String, Client> clientLists = new Hashtable<String,Client>();
-    private static Hashtable<String, HashSet<String>> watchedPaths = new Hashtable<String, HashSet<String>>();
+    public static Hashtable<String, ContextListener> clientLists = null;
+    private static Hashtable<String, HashSet<String>> watchedPaths = null;
+    public static Hashtable<String, String> clientRoots = null;
 
 
-    private static int NONE = -1;
-    private static int NODECREATED = 1;
-    private static int NODEDELETED = 2;
-    private static int NODEDATACHANGED = 3;
-    private static int NODECHILDRENCHANGED = 4;
+    private static int NONE;
+    private static int NODECREATED;
+    private static int NODEDELETED;
+    private static int NODEDATACHANGED;
+    private static int NODECHILDRENCHANGED;
+
+    static{
+        NONE = -1;
+        NODECREATED = 1;
+        NODEDELETED = 2;
+        NODEDATACHANGED = 3;
+        NODECHILDRENCHANGED = 4;
+    }
 
     public static class Node{
         public byte [] data;
@@ -54,35 +59,61 @@ public class ShareContext {
     }
 
     public ShareContext(){
-    }
-
-    public static void init(){
         if (root == null){
             root = new Node("/", null, null);
-            LOG.info("Share context created.");
+        }
+        if (df ==null){
+            df = new DecimalFormat("00000000");
+        }
+        if (seqTable == null){
+            seqTable = new Hashtable<String, Integer>();
+        }
+        if (clientLists == null){
+            clientLists = new Hashtable<String,ContextListener>();
+        }
+        if (watchedPaths == null){
+            watchedPaths = new Hashtable<String, HashSet<String>>();
+        }
+        if (clientRoots == null){
+            clientRoots = new Hashtable<String, String>();
         }
     }
 
-    public String register(Client c){
-        String u =UUID.randomUUID().toString();
-        clientLists.put(u, c);
-        return u;
+    public static void init() throws InterruptedException{
+        root = new Node("/", null, null);
+        df = new DecimalFormat("00000000");
+        seqTable = new Hashtable<String, Integer>();
+        clientLists = new Hashtable<String,ContextListener>();
+        watchedPaths = new Hashtable<String, HashSet<String>>();
+        clientRoots = new Hashtable<String, String>();
     }
-    public void unregister(String id){
-        clientLists.remove(id);
+
+
+    public String createNewId() {
+        return UUID.randomUUID().toString();
     }
-    synchronized void callback(String path, int mode){
-        String tmp;
+    public synchronized void unregister(String id){
+        if (id == null) return;
+
+        if (clientLists.containsKey(id)){
+            clientLists.remove(id);
+        }
+        if (clientRoots.containsKey(id)){
+            clientRoots.remove(id);
+        }
+    }
+    private  void callback(String path, int mode){
         if (watchedPaths.containsKey(path)){
             for (String session : watchedPaths.get(path)) {
                 try {
-                    Client c = clientLists.get(session);
-                    tmp = path.substring(c.root.length());
-                    if (tmp.length() == 0){
-                        c.call(mode, "/");
-                    }else{
-                        c.call(mode, tmp);
+                    ContextListener c = clientLists.get(session);
+                    String root = clientRoots.get(session);
+                    if (path.length() > root.length()){
+                        root = path.substring(root.length());
+                    }else if (path.length() == root.length()){
+                        root = "/";
                     }
+                    c.method(mode, root);
                 }catch (NullPointerException exp ){
                     LOG.warn("client "+session+" already disconnected.");
                 }
@@ -91,22 +122,25 @@ public class ShareContext {
         }
     }
 
-    synchronized public String createNode(String path, byte [] data) throws Exception{
-        int loc = path.lastIndexOf("/");
-        String existPath = path.substring(0, loc + 1);
-        String name = path.substring(loc+1);
-        Node e = findNode(existPath, false);
-        if (e.children.containsKey(name)){
-            throw new java.lang.IllegalArgumentException("The path already existed.");
-        }
-        Node node = new Node(name, data, e);
-        e.children.put(name, node);
-        //TODO: check watch
-        callback(path, NODECREATED);
-        callback(path.substring(0,path.lastIndexOf("/")), NODECHILDRENCHANGED);
+     public String createNode(String path, byte [] data) throws Exception{
+         int loc = path.lastIndexOf("/");
+         String existPath = path.substring(0, loc + 1);
+         String name = path.substring(loc+1);
+         Node e = findNode(existPath, false);
+         if (e.children.containsKey(name)){
+            // throw new java.lang.IllegalArgumentException("The path already existed.");
+             return name;
+         }
+         Node node = new Node(name, data, e);
+         e.children.put(name, node);
+         //TODO: check watch
+         callback(path, NODECREATED);
+         if(path.lastIndexOf("/") != -1){
+             callback(path.substring(0,path.lastIndexOf("/")), NODECHILDRENCHANGED);
+         }
         return name;
     }
-    synchronized public void setData(String path, byte [] data) throws Exception{
+     public void setData(String path, byte [] data) throws Exception{
         Node e = findNode(path, false);
         e.data = data;
         e.version ++;
@@ -114,7 +148,7 @@ public class ShareContext {
         callback(path, NODEDATACHANGED);
         callback(path.substring(0,path.lastIndexOf("/")), NODECHILDRENCHANGED);
     }
-    synchronized void deleteNode(String path, boolean force) throws Exception{
+     void deleteNode(String path, boolean force) throws Exception{
         int loc = path.lastIndexOf("/");
         String last = path.substring(loc + 1);
         String parentPath = path.substring(0,loc);
@@ -136,7 +170,7 @@ public class ShareContext {
         }
     }
 
-    private Node findNode(String path, boolean force) throws Exception{
+     private Node findNode(String path, boolean force) throws Exception{
         Node e = root;
         String [] tokens = path.split("/");
         for (String token : tokens){
@@ -156,8 +190,8 @@ public class ShareContext {
         return e;
     }
 
-    private void addWatchCallbacks(String path, String sessionId){
-        if (watchedPaths.containsKey(path)){
+     void addWatchCallbacks(String path, String sessionId){
+        if (watchedPaths.containsKey(path) && watchedPaths.get(path)!=null){
             watchedPaths.get(path).add(sessionId);
         }else{
             HashSet<String> tmp = new HashSet<String>();
@@ -166,7 +200,7 @@ public class ShareContext {
         }
     }
     //TODO: need watch
-    public boolean Exists(String path, boolean watch, String sessionId) throws Exception{
+     public boolean Exists(String path, boolean watch, String sessionId) throws Exception{
         if (watch){
             addWatchCallbacks(path, sessionId);
         }
@@ -177,7 +211,7 @@ public class ShareContext {
         }
     }
     //TODO: need watch
-    public byte [] getData(String path, boolean watch, String sessionId) throws Exception{
+     public byte [] getData(String path, boolean watch, String sessionId) throws Exception{
         if (watch){
             addWatchCallbacks(path, sessionId);
         }
@@ -188,15 +222,18 @@ public class ShareContext {
         return e.data;
     }
     //TODO: need watch
-    public int getVersion(String path, boolean watch, String sessionId) throws Exception{
+     public Integer getVersion(String path, boolean watch, String sessionId) throws Exception{
         if (watch){
             addWatchCallbacks(path, sessionId);
         }
         Node e = findNode(path, true);
+        if (e == null){
+            return -1;
+        }
         return e.version;
     }
     //TODO: need watch
-    public String [] getChildren(String path, boolean watch, String sessionId) throws Exception{
+     public String [] getChildren(String path, boolean watch, String sessionId) throws Exception{
         if (watch){
             addWatchCallbacks(path, sessionId);
         }
@@ -209,7 +246,7 @@ public class ShareContext {
             return new String[0];
         }
     }
-    public void deleteAll(String path, boolean force) throws Exception{
+     public void deleteAll(String path, boolean force) throws Exception{
 
         deleteNode(path, force);
         /*Node e = findNode(path, force);
@@ -219,12 +256,13 @@ public class ShareContext {
             e.children.clear();
         }*/
     }
-    public static void shutDown(){
+    public static void shutDown() throws InterruptedException, Exception{
         LOG.info("zookeeper shut down.");
-        root.name = "/";
-        root.data = null;
-        root.children.clear();
-        root.version = 0;
+        root = null;
+        clientLists = null;
+        watchedPaths = null;
+        seqTable = null;
+        clientRoots = null;
     }
 
     public static void main(String[] args) throws Exception {

@@ -498,7 +498,7 @@
 
 (defn rmr
   [path]
-  (log-debug "Rmr path " path)
+  (log-message "Rmr path " path)
   (when (exists-file? path)
     (try
       (FileUtils/forceDelete (File. path))
@@ -507,7 +507,7 @@
 (defn rmpath
   "Removes file or directory at the path. Not recursive. Throws exception on failure"
   [path]
-  (log-debug "Removing path " path)
+  (log-message "Removing path " path)
   (when (exists-file? path)
     (let [deleted? (.delete (File. path))]
       (when-not deleted?
@@ -515,12 +515,12 @@
 
 (defn local-mkdirs
   [path]
-  (log-debug "Making dirs at " path)
+  (log-message "Making dirs at " path)
   (FileUtils/forceMkdir (File. path)))
 
 (defn touch
   [path]
-  (log-debug "Touching file at " path)
+  (log-message "Touching file at " path)
   (let [success? (do (if on-windows? (.mkdirs (.getParentFile (File. path))))
                    (.createNewFile (File. path)))]
     (when-not success?

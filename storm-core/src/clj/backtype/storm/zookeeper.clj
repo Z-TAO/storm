@@ -169,7 +169,7 @@
 (defnk mk-inprocess-zookeeper
   [localdir :port nil]
   (ShareContext/init)
-  [nil nil]
+  [2000 2000]
   )
 
 (defn shutdown-inprocess-zookeeper
