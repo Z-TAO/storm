@@ -49,12 +49,6 @@ public class Client{
     private static Node rootNode;
     private static Hashtable<String, ContextListener> clientCallbackLists;
     private static Hashtable<String, HashSet<String>> clientCallbackSessions;
-    static {
-        rootNode = new Node(null);
-        clientCallbackLists = new Hashtable<String, ContextListener>();
-        clientCallbackSessions = new Hashtable<String, HashSet<String>>(); //path --> clients sesionIds
-    }
-
 
     //for one single client;
     private String sessionId;
@@ -62,6 +56,11 @@ public class Client{
     private DecimalFormat df;
     private Vector<String> ephemeralList;
 
+    public static void init(){
+        rootNode = new Node(null);
+        clientCallbackLists = new Hashtable<String, ContextListener>();
+        clientCallbackSessions = new Hashtable<String, HashSet<String>>(); //path --> clients sesionIds
+    }
 
     public Client(String rootDir) throws InterruptedException{
         sessionId = generateSessionId();

@@ -169,6 +169,7 @@
 (defnk mk-inprocess-zookeeper
   [localdir :port nil]
   [2000 2000]
+  (Client/init)
   )
 
 (defn shutdown-inprocess-zookeeper
