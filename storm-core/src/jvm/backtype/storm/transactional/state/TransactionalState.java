@@ -21,7 +21,7 @@ import backtype.storm.Config;
 import backtype.storm.serialization.KryoValuesDeserializer;
 import backtype.storm.serialization.KryoValuesSerializer;
 import backtype.storm.sharedcontext.Client;
-import backtype.storm.sharedcontext.ShareContext;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -32,15 +32,15 @@ public class TransactionalState {
     Client _curator;
     KryoValuesSerializer _ser;
     KryoValuesDeserializer _des;
-    
+
     public static TransactionalState newUserState(Map conf, String id, Map componentConf) {
         return new TransactionalState(conf, id, componentConf, "user");
     }
-    
+
     public static TransactionalState newCoordinatorState(Map conf, String id, Map componentConf) {
-        return new TransactionalState(conf, id, componentConf, "coordinator");        
+        return new TransactionalState(conf, id, componentConf, "coordinator");
     }
-    
+
     protected TransactionalState(Map conf, String id, Map componentConf, String subroot) {
         try {
             conf = new HashMap(conf);
@@ -53,7 +53,7 @@ public class TransactionalState {
             String rootDir = conf.get(Config.TRANSACTIONAL_ZOOKEEPER_ROOT) + "/" + id + "/" + subroot;
             //<String> servers = (List<String>) getWithBackup(conf, Config.TRANSACTIONAL_ZOOKEEPER_SERVERS, Config.STORM_ZOOKEEPER_SERVERS);
             //Object port = getWithBackup(conf, Config.TRANSACTIONAL_ZOOKEEPER_PORT, Config.STORM_ZOOKEEPER_PORT);
-            Client initter = new Client(new ShareContext(),null);
+            Client initter = new Client("");
             if (rootDir.lastIndexOf("/") == -1){
                 initter.CreateNode(rootDir, null, Client.PERSISTENT);
             }else {
@@ -61,11 +61,11 @@ public class TransactionalState {
                 initter.CreateNode(rootDir, null, Client.PERSISTENT);
             }
 
-            
+
             initter.close();
-                                    
+
             //_curator = Utils.newCuratorStarted(conf, servers, port, rootDir);
-            _curator = new Client(rootDir, new ShareContext(), null);
+            _curator = new Client(rootDir);
             _ser = new KryoValuesSerializer(conf);
             _des = new KryoValuesDeserializer(conf);
         } catch (Exception e) {

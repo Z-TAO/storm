@@ -20,46 +20,41 @@ package storm.trident.topology.state;
 
 import backtype.storm.Config;
 import backtype.storm.sharedcontext.Client;
-import backtype.storm.sharedcontext.ShareContext;
-import backtype.storm.utils.Utils;
-import org.apache.curator.framework.CuratorFramework;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import org.apache.zookeeper.CreateMode;
-import org.apache.zookeeper.KeeperException;
 import org.json.simple.JSONValue;
 
 public class TransactionalState {
     Client _curator;
-    
+
     public static TransactionalState newUserState(Map conf, String id) {
         return new TransactionalState(conf, id, "user");
     }
-    
+
     public static TransactionalState newCoordinatorState(Map conf, String id) {
-        return new TransactionalState(conf, id, "coordinator");        
+        return new TransactionalState(conf, id, "coordinator");
     }
-    
+
     protected TransactionalState(Map conf, String id, String subroot) {
         try {
             conf = new HashMap(conf);
             String rootDir = conf.get(Config.TRANSACTIONAL_ZOOKEEPER_ROOT) + "/" + id + "/" + subroot;
             //List<String> servers = (List<String>) getWithBackup(conf, Config.TRANSACTIONAL_ZOOKEEPER_SERVERS, Config.STORM_ZOOKEEPER_SERVERS);
             //Object port = getWithBackup(conf, Config.TRANSACTIONAL_ZOOKEEPER_PORT, Config.STORM_ZOOKEEPER_PORT);
-            Client initter = new Client(new ShareContext(),null);
+            Client initter = new Client("");
             if (rootDir.lastIndexOf("/") == -1){
                 initter.CreateNode(rootDir, null, Client.PERSISTENT);
             }else {
                 initter.mkdirs(rootDir.substring(0, rootDir.lastIndexOf("/")));
                 initter.CreateNode(rootDir, null, Client.PERSISTENT);
             }
-            
+
             initter.close();
 
-            _curator = new Client(rootDir, new ShareContext(), null);
+            _curator = new Client(rootDir);
         } catch (Exception e) {
            throw new RuntimeException(e);
         }

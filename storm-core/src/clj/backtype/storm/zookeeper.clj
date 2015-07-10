@@ -26,7 +26,7 @@
   ;(:import [java.net InetSocketAddress BindException])
   (:import [java.io File])
   (:import [backtype.storm.utils Utils])
-  (:import [backtype.storm.sharedcontext Client ShareContext ContextListener])
+  (:import [backtype.storm.sharedcontext Client ContextListener])
   (:use [backtype.storm util log config]))
 
 
@@ -47,11 +47,11 @@
    :root ""
    :watcher default-watcher
    :auth-conf nil]
-  (let [client (Client. root (ShareContext.)
-                 (reify
-                   ContextListener
-                   (^void method [this ^int type ^String path]
-                     (watcher :connected (zk-event-types type) path))))]
+  (let [client (Client. root)]
+    (.addListener client (reify
+                           ContextListener
+                           (^void method [this ^int type ^String path]
+                             (watcher :connected (zk-event-types type) path))))
     ;(let [fk (Utils/newCurator conf servers port root (when auth-conf (ZookeeperAuthInfo. auth-conf)))]
     ;;(.. fk
     ;    (getCuratorListenable)
@@ -125,7 +125,7 @@
         nil)
       (catch Exception e (throw (wrap-in-runtime e))))))
 
-(defn get-data-with-version 
+(defn get-data-with-version
   [^Client zk ^String path watch?]
   (try-cause
     (if-let [data
@@ -168,11 +168,10 @@
 
 (defnk mk-inprocess-zookeeper
   [localdir :port nil]
-  (ShareContext/init)
   [2000 2000]
   )
 
 (defn shutdown-inprocess-zookeeper
   [handle]
-  (ShareContext/shutDown)
+  (Client/shutdown)
   )

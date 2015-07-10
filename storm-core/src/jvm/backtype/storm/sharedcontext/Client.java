@@ -1,8 +1,12 @@
 package backtype.storm.sharedcontext;
+import backtype.storm.messaging.netty.Context;
+import backtype.storm.serialization.types.HashMapSerializer;
+import backtype.storm.serialization.types.HashSetSerializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
+import java.text.DecimalFormat;
+import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -17,42 +21,79 @@ public class Client{
     public final static int EPHEMERAL = 1;
     public final static int PERSISTENT = 2;
     public final static int SEQUENTIAL = 3;
-
-    public ContextListener cl;
-    public ShareContext sc;
-    public ArrayList<String> ephemeralNodeList;
-
-    //private static Lock lock = new ReentrantLock();
-    public String root;
-    private String sessionId;
+    private final static int NONE = -1;
+    private final static int NODECREATED = 1;
+    private final static int NODEDELETED = 2;
+    private final static int NODEDATACHANGED = 3;
+    private final static int NODECHILDRENCHANGED = 4;
 
 
-    public Client(ContextListener cl) throws InterruptedException{
-        Init("", new ShareContext(), cl);
-    }
-    public Client(ShareContext sc, ContextListener cl) throws InterruptedException{
-        Init("",sc,cl);
-    }
-    public Client(String root, ShareContext sc, ContextListener cl) throws InterruptedException{
-        Init(root, sc, cl);
-    }
 
-    private void Init(String root, ShareContext sc, ContextListener cl) throws InterruptedException{
+    public static class Node{
+        public Hashtable<String, Node> children;
+        //public String name;//useless
+        public Integer version;
+        public byte [] data;
+        public Integer incNumber;
 
-        ephemeralNodeList = new ArrayList<String>();
-        this.sc = sc;
-        this.cl = cl;
-        this.root = root;
-        //by everytime init, register this object to the server;
-        sessionId = sc.createNewId();
-        LOG.info("Client created with id: " + sessionId);
-        if (cl !=null){
-            sc.clientLists.put(sessionId, cl);
+        public Node(byte [] data){
+            this.data = data;
+            this.version = 0;
+            children = new Hashtable<String, Node>();
+            incNumber = 0;
         }
-        sc.clientRoots.put(sessionId, root);
-        Thread.sleep(0);
+
     }
-    private String getNodeType(int type){
+
+    //for all the clients
+    private static Node rootNode;
+    private static Hashtable<String, ContextListener> clientCallbackLists;
+    private static Hashtable<String, HashSet<String>> clientCallbackSessions;
+    static {
+        rootNode = new Node(null);
+        clientCallbackLists = new Hashtable<String, ContextListener>();
+        clientCallbackSessions = new Hashtable<String, HashSet<String>>(); //path --> clients sesionIds
+    }
+
+
+    //for one single client;
+    private String sessionId;
+    private String rootDir;
+    private DecimalFormat df;
+    private Vector<String> ephemeralList;
+
+
+    public Client(String rootDir) throws InterruptedException{
+        sessionId = generateSessionId();
+        this.rootDir = rootDir;
+        df = new DecimalFormat("00000000");
+        ephemeralList = new Vector<String>();
+    }
+
+    public void addListener(ContextListener cl) throws InterruptedException{
+        clientCallbackLists.put(sessionId, cl);
+    }
+    private String generateSessionId(){
+        return UUID.randomUUID().toString();
+    }
+
+    public void close(){
+        //TODO:clear ephemeralNodeList
+        LOG.info("client "+sessionId+" closed.");
+        for (String s : ephemeralList) {
+            deleteNode(s, true);
+        }
+        clientCallbackLists.remove(sessionId);
+        ephemeralList.clear();
+    }
+
+    public static void shutdown(){
+        rootNode = new Node(null);
+        clientCallbackLists = new Hashtable<String, ContextListener>();
+        clientCallbackSessions = new Hashtable<String, HashSet<String>>();
+    }
+
+    public static String getNodeType(int type){
         switch (type){
             case EPHEMERAL:  return "EPHEMERAL";
             case PERSISTENT: return "PERSISTENT";
@@ -60,67 +101,170 @@ public class Client{
         }
         return null;
     }
-    public void call(int type, String path){
-        cl.method(type, path);
+    public static String getActionType(int type){
+        switch (type){
+            case NONE : return "NONE";
+            case NODECREATED : return "NODECREATED";
+            case NODEDELETED : return "NODEDELETED";
+            case NODEDATACHANGED : return "NODEDATACHANGED";
+            case NODECHILDRENCHANGED : return "NODECHILDRENCHANGED";
+        }
+        return null;
     }
 
-    public String CreateNode(String path, byte[] data, int mode)throws Exception{
-        if (mode == EPHEMERAL){
-            ephemeralNodeList.add(path);
-        }
-        path = root + parsePath(path);
-        if (mode == SEQUENTIAL){
-            //first find the largest num for now
-            Integer id = sc.seqTable.containsKey(path)?sc.seqTable.get(path) + 1: 1;
-            sc.seqTable.put(path, id);
-            path = path + sc.df.format(id);
-        }
-
-        LOG.info("Creating node for " + path + " in mode " + getNodeType(mode));
-        return sc.createNode(path, data);
-    }
     public String parsePath(String path){
         return path.compareTo("/")==0?"":path;
     }
 
-    public void setData(String path, byte [] data)throws Exception{
-        LOG.debug("set data on " + path + " with client:" + sessionId);
-        path = root + parsePath(path);
-        sc.setData(path, data);
+    public Node findNode(String path, boolean force) throws RuntimeException{
+        Node e = rootNode;
+        String [] tokens = path.split("/");
+        for (String token : tokens){
+            if (token.isEmpty()){
+                continue;
+            }
+            if (!e.children.containsKey(token)){
+                if (force){
+                    //LOG.warn("Path "+path+" not existed.");
+                    return null;
+                }else{
+                    throw new RuntimeException("path not exist!");
+                }
+            }
+            e = e.children.get(token);
+        }
+        return e;
     }
-    public byte [] getData(String path, boolean watch) throws Exception{
-        path = root + parsePath(path);
-        byte [] data = sc.getData(path, watch, sessionId);
-        LOG.debug("get data on " + path + " with client:" + sessionId + " data:");
-        return data;
-    }
-    public Integer getVersion(String path, boolean watch) throws Exception{
-        LOG.debug("get version on " + path + " with client:" + sessionId);
-        path = root + parsePath(path);
-        return sc.getVersion(path, watch, sessionId);
-    }
-    public String [] getChildren(String path, boolean watch) throws Exception{
-        LOG.debug("get children on " + path + " with client:" + sessionId);
-        path = root + parsePath(path);
-        return sc.getChildren(path, watch, sessionId);
-    }
-    public boolean Exists(String path, boolean watch) throws Exception{
-        LOG.debug("check exist on " + path + " with client:" + sessionId);
-        path = root + parsePath(path);
-        return sc.Exists(path, watch, sessionId);
-    }
-    public void deleteNode(String path, boolean force) throws Exception{
-        path = root + parsePath(path);
-        LOG.info("Delete node " + path);
-        sc.deleteNode(path, force);
-    }
-    public void deleteRecursively(String path, boolean force) throws Exception{
-        path = root + parsePath(path);
-        LOG.info("Delete children from node " + path);
-        sc.deleteAll(path, force);
-    }
-    public void mkdirs(String path) throws Exception{
 
+    private String getParentPath(String path){
+        //if just "/", don't have one
+        if (path.compareTo("/") == 0){
+            return "";
+        }
+        //now they are like "/a...
+        return path.substring(0, path.lastIndexOf("/"));
+    }
+
+    private void callback(int type, String path){
+
+
+        String childPath = path.substring(rootDir.length());
+        childPath = childPath.compareTo("")==0?"/":childPath;
+        if (clientCallbackSessions.containsKey(path)){
+            for (String session : clientCallbackSessions.get(path)) {
+                if (clientCallbackLists.containsKey(session)){
+                    clientCallbackLists.get(session).method(type, childPath);
+                }
+            }
+            clientCallbackSessions.remove(path);
+        }
+    }
+
+    private void setCallback(String path, String sessionId){
+        if (clientCallbackSessions.containsKey(path)){
+            clientCallbackSessions.get(path).add(sessionId);
+        }else{
+            HashSet<String> s = new HashSet<String>();
+            s.add(sessionId);
+            clientCallbackSessions.put(path, s);
+        }
+    }
+    public String CreateNode(String path, byte[] data, int mode) throws RuntimeException{
+        LOG.info("Creating node for " + path + " in mode " + getNodeType(mode));
+        if (mode == EPHEMERAL){
+            ephemeralList.add(path);
+        }
+        String realPath = rootDir + parsePath(path);
+        //STEP 1: find the node;
+        String parentPath = getParentPath(realPath);
+        Node e = findNode(parentPath, false); //if not exists, throw exception
+        String addedPath = realPath.substring(parentPath.length() + 1);
+        if (mode == SEQUENTIAL){
+            synchronized (this) {
+                addedPath += df.format(e.incNumber);
+                e.incNumber++;
+            }
+        }
+        //add
+        Node addedNode = new Node(data);
+        e.children.put(addedPath, addedNode);
+
+        callback(NODECREATED, realPath);
+        //parents
+        callback(NODECHILDRENCHANGED, getParentPath(realPath));
+
+        return path;
+    }
+
+    public void deleteNode(String path, boolean force) throws RuntimeException{
+        String realPath = rootDir + parsePath(path);
+        LOG.info("Delete node " + path);
+        String parentPath = getParentPath(realPath);
+        String childPath = realPath.substring(parentPath.length()+1);
+        Node e = findNode(parentPath, force);
+        if (e != null && e.children.containsKey(childPath)){
+            callback(NODEDELETED, realPath);
+            //parents
+            callback(NODECHILDRENCHANGED, getParentPath(realPath));
+            e.children.remove(childPath);
+        }
+    }
+
+    public void setData(String path, byte [] data)throws RuntimeException{
+        LOG.debug("set data on " + path + " with client:" + sessionId);
+        String realPath = rootDir + parsePath(path);
+        Node e = findNode(realPath, false);
+        e.data = data;
+        e.version ++;
+        callback(NODEDATACHANGED, realPath);
+        //parents
+        callback(NODECHILDRENCHANGED, getParentPath(realPath));
+    }
+    public void deleteRecursively(String path, boolean force) throws RuntimeException{
+        deleteNode(path, force);
+    }
+
+    public byte[] getData(String path, boolean watch) throws RuntimeException{
+        LOG.debug("get data on " + path + " with client:" + sessionId + " data:");
+        String realPath = rootDir + parsePath(path);
+        Node e = findNode(realPath, false);
+        if (watch){
+           setCallback(realPath, sessionId);
+        }
+        return e.data;
+    }
+    public Integer getVersion(String path, boolean watch) throws RuntimeException{
+        LOG.debug("get version on " + path + " with client:" + sessionId);
+        path = rootDir + parsePath(path);
+        Node e = findNode(path, true);
+        if (e == null){
+            return null;
+        }
+        if (watch){
+            setCallback(path, sessionId);
+        }
+        return e.version;
+    }
+    public String [] getChildren(String path, boolean watch) throws RuntimeException{
+        LOG.debug("get children on " + path + " with client:" + sessionId);
+        path = rootDir + parsePath(path);
+        Node e = findNode(path, false);
+        if (watch){
+            setCallback(path, sessionId);
+        }
+        return e.children.keySet().toArray(new String[e.children.size()]);
+    }
+
+    public boolean Exists(String path, boolean watch) throws RuntimeException{
+        path = rootDir + parsePath(path);
+        Node e = findNode(path, true);
+        if (watch){
+            setCallback(path, sessionId);
+        }
+        return e != null;
+    }
+
+    public void mkdirs(String path) throws RuntimeException{
         if (path.compareTo("") == 0){
             return;
         }
@@ -135,7 +279,7 @@ public class Client{
         }
         while(checkPath.compareTo(path) !=0){
             String tmp = path.substring(checkPath.length()+1);
-            if (tmp.indexOf("/") != -1){
+            if (tmp.contains("/")){
                 tmp = tmp.substring(0, tmp.indexOf("/"));
                 checkPath = checkPath + "/" + tmp;
             }else if (tmp.length() !=0){
@@ -146,31 +290,22 @@ public class Client{
         }
     }
 
-    public void close(){
-        LOG.info("client "+sessionId+" closed.");
-        sc.unregister(sessionId);
-        for (String path : ephemeralNodeList) {
-            try {
-                deleteNode(path, true);
-            }catch (Exception e){
-                //do nothing
-            }
-        }
-        ephemeralNodeList.clear();
-    }
 
     public static class callback implements ContextListener{
         @Override
         public void method(int type, String path) {
-            LOG.warn("get " + type + " at:" + path);
+            LOG.warn("get " + getActionType(type) + " at:" + path);
 
         }
     }
-    public static void main(String[] args) throws Exception {
-        Client cc = new Client("", new ShareContext(), new callback());
+
+  public static void main(String[] args) throws Exception {
+        Client cc = new Client("");
+      cc.addListener(new callback());
         cc.CreateNode("/happy", null, PERSISTENT);
 
-        Client client = new Client("/happy", new ShareContext(), new callback());
+        Client client = new Client("/happy");
+      client.addListener(new callback());
         System.out.println(client.Exists("/happy/1/2/3", false));
 
         System.out.println(client.CreateNode("/happy", null, PERSISTENT));
@@ -186,7 +321,7 @@ public class Client{
         v1 = client.getVersion("/happy/1", true);
         v1 = client.getVersion("/happy/1/2", true);
         v1 = client.getVersion("/happy/1/2/3", true);
-        client.deleteNode("kj/jkgh/hki", true);
+        client.deleteNode("/kj/jkgh/hki", true);
         client.deleteNode("/happy/1", false);
         boolean f = client.Exists("/happy", false);
         f = client.Exists("/happy/1", false);
@@ -201,7 +336,8 @@ public class Client{
         client.CreateNode("/a", null, SEQUENTIAL);
         client.close();
 
-        client = new Client( new ShareContext(), new callback());
+        client = new Client( "");
+      client.addListener(new callback());
         f = client.Exists("/a", false);
         //byte [] data = client.getData("/a", false);
 
