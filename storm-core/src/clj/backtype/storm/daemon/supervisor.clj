@@ -227,6 +227,7 @@
    })
 
 (defn sync-processes [supervisor]
+  (comment
   (let [conf (:conf supervisor)
         download-lock (:download-lock supervisor)
         ^LocalState local-state (:local-state supervisor)
@@ -312,7 +313,7 @@
                   (log-message "Unable to launch worker due to "
                                (.getMessage e))))
               id))
-     )))
+     ))))
 
 (defn assigned-storm-ids-from-port-assignments [assignment]
   (->> assignment
@@ -337,6 +338,7 @@
 
 (defn mk-synchronize-supervisor [supervisor sync-processes event-manager processes-event-manager]
   (fn this []
+    (comment
     (let [conf (:conf supervisor)
           download-lock (:download-lock supervisor)
           storm-cluster-state (:storm-cluster-state supervisor)
@@ -354,8 +356,7 @@
                                            (:assignment-id supervisor)
                                            existing-assignment
                                            (:sync-retry supervisor))
-          new-assignment (->> all-assignment
-                              (filter-key #(.confirmAssigned isupervisor %)))
+          new-assignment (filter-key #(.confirmAssigned isupervisor %) all-assignment)
           assigned-storm-ids (assigned-storm-ids-from-port-assignments new-assignment)
           ]
       (log-message "Synchronizing supervisor")
@@ -398,7 +399,7 @@
             (catch Exception e (log-message (.getMessage e))))
           ))
       (.add processes-event-manager sync-processes)
-      )))
+      ))))
 
 ;; in local state, supervisor stores who its current assignments are
 ;; another thread launches events to restart any dead processes if necessary
@@ -430,7 +431,7 @@
     (when (conf SUPERVISOR-ENABLE)
       ;; This isn't strictly necessary, but it doesn't hurt and ensures that the machine stays up
       ;; to date even if callbacks don't all work exactly right
-      (schedule-recurring (:timer supervisor) 0 10 (fn [] (.add event-manager synchronize-supervisor)))
+      ;(schedule-recurring (:timer supervisor) 0 10 (fn [] (.add event-manager synchronize-supervisor)))
       (schedule-recurring (:timer supervisor)
                           0
                           (conf SUPERVISOR-MONITOR-FREQUENCY-SECS)

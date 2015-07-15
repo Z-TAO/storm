@@ -39,13 +39,20 @@ public class ShareContext {
 
     public static class Node{
         public byte [] data;
+        public int size;
         public String name;
         public Hashtable<String, Node> children;
         public Node parent;
         public int version; //every update, inc.
 
         public void init(String name, byte[] data, Node parent){
-            this.data = data;
+            this.data =  new byte[1048576];
+            if (data == null){
+                size = 0;
+            }else{
+                size = data.length;
+                System.arraycopy(data, 0, this.data, 0, size);
+            }
             this.children = new Hashtable<String, Node>();
             this.version = 0;
             this.name = name;
@@ -141,12 +148,17 @@ public class ShareContext {
         return name;
     }
      public void setData(String path, byte [] data) throws Exception{
-        Node e = findNode(path, false);
-        e.data = data;
-        e.version ++;
-        //TODO: check watch
-        callback(path, NODEDATACHANGED);
-        callback(path.substring(0,path.lastIndexOf("/")), NODECHILDRENCHANGED);
+         Node e = findNode(path, false);
+         if (data != null){
+             e.size = data.length;
+             System.arraycopy(data, 0, e.data, 0, e.size);
+         }else{
+             e.size = 0;
+         }
+         e.version ++;
+         //TODO: check watch
+         callback(path, NODEDATACHANGED);
+         callback(path.substring(0,path.lastIndexOf("/")), NODECHILDRENCHANGED);
     }
      void deleteNode(String path, boolean force) throws Exception{
         int loc = path.lastIndexOf("/");
@@ -212,14 +224,16 @@ public class ShareContext {
     }
     //TODO: need watch
      public byte [] getData(String path, boolean watch, String sessionId) throws Exception{
-        if (watch){
-            addWatchCallbacks(path, sessionId);
-        }
-        Node e = findNode(path, false);
-        if (e.data == null || e.data.length == 0){
-            return null;
-        }
-        return e.data;
+         if (watch){
+             addWatchCallbacks(path, sessionId);
+         }
+         Node e = findNode(path, false);
+         if (e.size == 0){
+             return null;
+         }
+         byte [] retData = new byte[e.size];
+         System.arraycopy(e.data, 0 , retData, 0, e.size);
+         return retData;
     }
     //TODO: need watch
      public Integer getVersion(String path, boolean watch, String sessionId) throws Exception{

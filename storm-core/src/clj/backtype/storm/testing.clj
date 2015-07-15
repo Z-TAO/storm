@@ -96,6 +96,7 @@
 (defnk add-supervisor
   [cluster-map :ports 2 :conf {} :id nil]
   (let [tmp-dir (local-temp-path)
+        ports 1
         port-ids (if (sequential? ports)
                    ports
                    (doall (repeatedly ports (:port-counter cluster-map))))
@@ -117,7 +118,7 @@
 ;; local dir is always overridden in maps
 ;; can customize the supervisors (except for ports) by passing in map for :supervisors parameter
 ;; if need to customize amt of ports more, can use add-supervisor calls afterwards
-(defnk mk-local-storm-cluster [:supervisors 2 :ports-per-supervisor 3 :daemon-conf {} :inimbus nil :supervisor-slot-port-min 1024]
+(defnk mk-local-storm-cluster [:supervisors 1 :ports-per-supervisor 1 :daemon-conf {} :inimbus nil :supervisor-slot-port-min 1024]
   (let [zk-tmp (local-temp-path)
         [zk-port zk-handle] (if-not (contains? daemon-conf STORM-ZOOKEEPER-SERVERS)
                               (zk/mk-inprocess-zookeeper zk-tmp))

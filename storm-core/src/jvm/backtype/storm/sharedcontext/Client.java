@@ -27,32 +27,35 @@ public class Client{
     private String sessionId;
 
 
-    public Client(ContextListener cl) throws InterruptedException{
+    public Client(ContextListener cl) {
         Init("", new ShareContext(), cl);
     }
-    public Client(ShareContext sc, ContextListener cl) throws InterruptedException{
+    public Client(ShareContext sc, ContextListener cl){
         Init("",sc,cl);
     }
-    public Client(String root, ShareContext sc, ContextListener cl) throws InterruptedException{
+    public Client(String root, ShareContext sc, ContextListener cl){
         Init(root, sc, cl);
     }
 
-    private void Init(String root, ShareContext sc, ContextListener cl) throws InterruptedException{
-
-        ephemeralNodeList = new ArrayList<String>();
-        this.sc = sc;
-        this.cl = cl;
-        this.root = root;
-        //by everytime init, register this object to the server;
-        sessionId = sc.createNewId();
-        LOG.info("Client created with id: " + sessionId);
-        if (cl !=null){
-            sc.clientLists.put(sessionId, cl);
+    synchronized private void Init(String root, ShareContext sc, ContextListener cl){
+        try{
+            ephemeralNodeList = new ArrayList<String>();
+            this.sc = sc;
+            this.cl = cl;
+            this.root = root;
+            //by everytime init, register this object to the server;
+            sessionId = sc.createNewId();
+            LOG.info("Client created with id: " + sessionId);
+            if (cl !=null){
+                sc.clientLists.put(sessionId, cl);
+            }
+            sc.clientRoots.put(sessionId, root);
+            Thread.sleep(10);
+        }catch (InterruptedException e){
+            LOG.warn("Interrupted");
         }
-        sc.clientRoots.put(sessionId, root);
-        Thread.sleep(0);
     }
-    private String getNodeType(int type){
+    synchronized private String getNodeType(int type){
         switch (type){
             case EPHEMERAL:  return "EPHEMERAL";
             case PERSISTENT: return "PERSISTENT";
@@ -60,11 +63,11 @@ public class Client{
         }
         return null;
     }
-    public void call(int type, String path){
+    synchronized  public void call(int type, String path){
         cl.method(type, path);
     }
 
-    public String CreateNode(String path, byte[] data, int mode)throws Exception{
+    synchronized public String CreateNode(String path, byte[] data, int mode)throws Exception{
         if (mode == EPHEMERAL){
             ephemeralNodeList.add(path);
         }
@@ -83,43 +86,43 @@ public class Client{
         return path.compareTo("/")==0?"":path;
     }
 
-    public void setData(String path, byte [] data)throws Exception{
+    synchronized public void setData(String path, byte [] data)throws Exception{
         LOG.debug("set data on " + path + " with client:" + sessionId);
         path = root + parsePath(path);
         sc.setData(path, data);
     }
-    public byte [] getData(String path, boolean watch) throws Exception{
+    synchronized public byte [] getData(String path, boolean watch) throws Exception{
         path = root + parsePath(path);
         byte [] data = sc.getData(path, watch, sessionId);
         LOG.debug("get data on " + path + " with client:" + sessionId + " data:");
         return data;
     }
-    public Integer getVersion(String path, boolean watch) throws Exception{
+    synchronized public Integer getVersion(String path, boolean watch) throws Exception{
         LOG.debug("get version on " + path + " with client:" + sessionId);
         path = root + parsePath(path);
         return sc.getVersion(path, watch, sessionId);
     }
-    public String [] getChildren(String path, boolean watch) throws Exception{
+    synchronized public String [] getChildren(String path, boolean watch) throws Exception{
         LOG.debug("get children on " + path + " with client:" + sessionId);
         path = root + parsePath(path);
         return sc.getChildren(path, watch, sessionId);
     }
-    public boolean Exists(String path, boolean watch) throws Exception{
+    synchronized public boolean Exists(String path, boolean watch) throws Exception{
         LOG.debug("check exist on " + path + " with client:" + sessionId);
         path = root + parsePath(path);
         return sc.Exists(path, watch, sessionId);
     }
-    public void deleteNode(String path, boolean force) throws Exception{
+    synchronized public void deleteNode(String path, boolean force) throws Exception{
         path = root + parsePath(path);
         LOG.info("Delete node " + path);
         sc.deleteNode(path, force);
     }
-    public void deleteRecursively(String path, boolean force) throws Exception{
+    synchronized public void deleteRecursively(String path, boolean force) throws Exception{
         path = root + parsePath(path);
         LOG.info("Delete children from node " + path);
         sc.deleteAll(path, force);
     }
-    public void mkdirs(String path) throws Exception{
+    synchronized public void mkdirs(String path) throws Exception{
 
         if (path.compareTo("") == 0){
             return;

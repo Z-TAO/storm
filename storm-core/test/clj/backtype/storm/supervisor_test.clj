@@ -472,3 +472,5 @@
                              {"sup1" [3 4]}
                              (get-storm-id (:storm-cluster-state cluster) "topology2"))
      )))
+
+(launches-assignment)

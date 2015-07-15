@@ -58,7 +58,7 @@ public class VersionedStore {
 
     public Long mostRecentVersion() throws IOException {
         List<Long> all = getAllVersions();
-        if(all.size()==0) return null;
+        if(all.isEmpty()) return null;
         return all.get(0);
     }
 

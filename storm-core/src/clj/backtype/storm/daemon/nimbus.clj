@@ -21,6 +21,8 @@
   (:import [java.nio ByteBuffer])
   (:import [java.io FileNotFoundException])
   (:import [java.nio.channels Channels WritableByteChannel])
+  (:import [java.net URI])
+  (:require [backtype.storm.daemon [local_worker :as worker]])
   (:use [backtype.storm.scheduler.DefaultScheduler])
   (:import [backtype.storm.scheduler INimbus SupervisorDetails WorkerSlot TopologyDetails
             Cluster Topologies SchedulerAssignment SchedulerAssignmentImpl DefaultScheduler ExecutorDetails])
@@ -31,6 +33,35 @@
     :methods [^{:static true} [launch [backtype.storm.scheduler.INimbus] void]]))
 
 (bootstrap)
+
+(defn resources-jar []
+  (->> (.split (current-classpath) File/pathSeparator)
+    (filter #(.endsWith  % ".jar"))
+    (filter #(zip-contains-dir? % RESOURCES-SUBDIR))
+    first ))
+
+(defn download-storm-code
+  [conf storm-id master-code-dir]
+  (let [stormroot (supervisor-stormdist-root conf storm-id)]
+      (FileUtils/copyDirectory (File. master-code-dir) (File. stormroot))
+      (let [classloader (.getContextClassLoader (Thread/currentThread))
+            resources-jar (resources-jar)
+            url (.getResource classloader RESOURCES-SUBDIR)
+            target-dir (str stormroot file-path-separator RESOURCES-SUBDIR)]
+        (cond
+          resources-jar
+          (do
+            (log-message "Extracting resources from jar at " resources-jar " to " target-dir)
+            (extract-dir-from-jar resources-jar RESOURCES-SUBDIR stormroot))
+          url
+          (do
+            (log-message "Copying resources at " (URI. (str url)) " to " target-dir)
+            (if (= (.getProtocol url) "jar" )
+              (extract-dir-from-jar (.getFile (.getJarFileURL (.openConnection url))) RESOURCES-SUBDIR stormroot)
+              (FileUtils/copyDirectory (File. (.getPath (URI. (str url)))) (File. target-dir)))
+            )
+          )
+        )))
 
 (defn file-cache-map [conf]
   (TimeCacheMap.
@@ -514,7 +545,7 @@
                   .getExecutorToSlot
                   (#(into {} (for [[^ExecutorDetails executor ^WorkerSlot slot] %]
                               {[(.getStartTask executor) (.getEndTask executor)]
-                               [(.getNodeId slot) (.getPort slot)]})))))
+                               [(.getNodeId slot) (int (.getPort slot))]})))))
            scheduler-assignments))
 
 ;; NEW NOTES
@@ -692,6 +723,37 @@
                                                  (select-keys all-node->host all-nodes)
                                                  executor->node+port
                                                  start-times)}))]
+    (if (not-empty new-assignments)
+      ;(= 1 2)
+      ;;; newly buildin workers
+      (let [share-context (msg-loader/mk-local-context)
+            conf (:conf nimbus)
+            topology-id (key (first new-assignments))
+            assignment-id (first (val(first(val (first topology->executor->node+port)))))
+            port 1024
+            worker-id (uuid)
+            topology-detail (.getById topologies topology-id)
+            topology (.getTopology topology-detail)
+            topology-conf (.getConf topology-detail)
+            master-source-dir (:master-code-dir (val (first new-assignments)))
+            ]
+        (download-storm-code topology-conf topology-id master-source-dir)
+        (local-mkdirs (worker-pids-root topology-conf worker-id))
+        (let [worker (worker/mk-worker
+                       conf
+                       share-context
+                       topology-id
+                       assignment-id
+                       port
+                       worker-id
+                       topology
+                       topology-conf
+                       (val (first topology->executor->node+port)))]
+          (psim/register-process worker-id worker))
+
+        ))
+
+
 
     ;; tasks figure out what tasks to talk to by looking at topology at runtime
     ;; only log/set when there's been a change to the assignment
@@ -900,15 +962,15 @@
     (cleanup-corrupt-topologies! nimbus)
     (doseq [storm-id (.active-storms (:storm-cluster-state nimbus))]
       (transition! nimbus storm-id :startup))
-    (schedule-recurring (:timer nimbus)
-                        0
-                        (conf NIMBUS-MONITOR-FREQ-SECS)
-                        (fn []
-                          (when (conf NIMBUS-REASSIGN)
-                            (locking (:submit-lock nimbus)
-                              (mk-assignments nimbus)))
-                          (do-cleanup nimbus)
-                          ))
+    ;(schedule-recurring (:timer nimbus)
+    ;                    0
+    ;                    (conf NIMBUS-MONITOR-FREQ-SECS)
+    ;                    (fn []
+    ;                      (when (conf NIMBUS-REASSIGN)
+    ;                        (locking (:submit-lock nimbus)
+    ;                          (mk-assignments nimbus)))
+    ;                      (do-cleanup nimbus)
+    ;                      ))
     ;; Schedule Nimbus inbox cleaner
     (schedule-recurring (:timer nimbus)
                         0

@@ -67,6 +67,9 @@ public class WordCountTopology {
       count++;
       counts.put(word, count);
       collector.emit(new Values(word, count));
+      if (count % 1000 == 0){
+        System.out.println("word "+word+" has outputed :"+count);
+      }
     }
 
     @Override
@@ -79,13 +82,13 @@ public class WordCountTopology {
 
     TopologyBuilder builder = new TopologyBuilder();
 
-    builder.setSpout("spout", new RandomSentenceSpout(), 5);
+    builder.setSpout("spout", new RandomSentenceSpout(), 5).setNumTasks(10);
 
-    builder.setBolt("split", new SplitSentence(), 8).shuffleGrouping("spout");
-    builder.setBolt("count", new WordCount(), 12).fieldsGrouping("split", new Fields("word"));
+    builder.setBolt("split", new SplitSentence(), 8).shuffleGrouping("spout").setNumTasks(24);
+    builder.setBolt("count", new WordCount(), 12).fieldsGrouping("split", new Fields("word")).setNumTasks(12);
 
     Config conf = new Config();
-    conf.setDebug(true);
+    conf.setDebug(false);
 
 
     if (args != null && args.length > 0) {
@@ -94,12 +97,13 @@ public class WordCountTopology {
       StormSubmitter.submitTopologyWithProgressBar(args[0], conf, builder.createTopology());
     }
     else {
-      conf.setMaxTaskParallelism(3);
+      conf.setNumWorkers(3);
+      conf.setMaxTaskParallelism(30);
 
       LocalCluster cluster = new LocalCluster();
       cluster.submitTopology("word-count", conf, builder.createTopology());
 
-      Thread.sleep(10000);
+      Thread.sleep(100000000);
 
       cluster.shutdown();
     }
