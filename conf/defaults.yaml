@@ -124,7 +124,7 @@ storm.messaging.netty.flush.check.interval.ms: 10
 topology.enable.message.timeouts: true
 topology.debug: false
 topology.workers: 1
-topology.acker.executors: null
+topology.acker.executors: 0
 topology.tasks: null
 # maximum amount of time a message has to complete before it's considered failed
 topology.message.timeout.secs: 30

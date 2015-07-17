@@ -404,6 +404,7 @@
 ;; in local state, supervisor stores who its current assignments are
 ;; another thread launches events to restart any dead processes if necessary
 (defserverfn mk-supervisor [conf shared-context ^ISupervisor isupervisor]
+  (comment
   (log-message "Starting Supervisor with conf " conf)
   (.prepare isupervisor conf (supervisor-isupervisor-dir conf))
   (FileUtils/cleanDirectory (File. (supervisor-tmp-dir conf)))
@@ -462,7 +463,7 @@
            (and
             (timer-waiting? (:timer supervisor))
             (every? (memfn waiting?) managers)))
-           ))))
+           )))))
 
 (defn kill-supervisor [supervisor]
   (.shutdown supervisor)

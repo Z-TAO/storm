@@ -471,6 +471,21 @@
                                        {executor component}))]
         executor->component))
 
+(defn local-compute-executor->component [nimbus-conf storm-id topology topology-conf]
+  (let [executors (->> (storm-task-info topology topology-conf)
+                    reverse-map
+                    (map-val sort)
+                    (join-maps (->> (all-components topology) (map-val num-start-executors)))
+                    (map-val (partial apply partition-fixed))
+                    (mapcat second)
+                    (map to-executor-id))
+        task->component (storm-task-info topology topology-conf)
+        executor->component (into {} (for [executor executors
+                                           :let [start-task (first executor)
+                                                 component (task->component start-task)]]
+                                       {executor component}))]
+    executor->component))
+
 (defn- compute-topology->executors [nimbus storm-ids]
   "compute a topology-id -> executors map"
   (into {} (for [tid storm-ids]
@@ -985,7 +1000,7 @@
         (try
           (assert (not-nil? submitOptions))
           (validate-topology-name! storm-name)
-          (check-storm-active! nimbus storm-name false)
+          ;(check-storm-active! nimbus storm-name false)
           (let [topo-conf (from-json serializedConf)]
             (try
               (validate-configs-with-schemas topo-conf)
@@ -1011,13 +1026,54 @@
             (log-message "Received topology submission for " storm-name " with conf " storm-conf)
             ;; lock protects against multiple topologies being submitted at once and
             ;; cleanup thread killing topology in b/w assignment and starting the topology
+
+            (setup-storm-code conf storm-id uploadedJarLocation storm-conf topology)
+            ;; creating executors for each bolt/spout
+            (let [temp (local-compute-executor->component conf storm-id topology total-storm-conf)]
+              (println temp))
+
+            ;;make executors->node+port
+
+            (let [executor-id->tasks (doseq [])
+                  share-context (msg-loader/mk-local-context)
+                  conf (:conf nimbus)
+                  assignment-id (uuid)
+                  port 1024
+                  worker-id (uuid)
+                  master-source-dir (master-stormdist-root conf storm-id)
+                  executors (->> (storm-task-info topology total-storm-conf)
+                                        reverse-map
+                                        (map-val sort)
+                                        (join-maps (->> (all-components topology) (map-val num-start-executors)))
+                                        (map-val (partial apply partition-fixed))
+                                        (mapcat second)
+                                        (map to-executor-id))
+                  executor->component (local-compute-executor->component conf storm-id topology total-storm-conf)
+                  executor->node+port (into {} (for [executor executors]
+                                                 {executor #{assignment-id port}}))
+                  ]
+              (download-storm-code total-storm-conf storm-id master-source-dir)
+              (local-mkdirs (worker-pids-root total-storm-conf worker-id))
+              (let [worker (worker/mk-worker
+                             conf
+                             share-context
+                             storm-id
+                             assignment-id
+                             port
+                             worker-id
+                             topology
+                             total-storm-conf
+                             executor->node+port)]
+                (psim/register-process worker-id worker)))
+
+            (comment
             (locking (:submit-lock nimbus)
               (setup-storm-code conf storm-id uploadedJarLocation storm-conf topology)
-              (.setup-heartbeats! storm-cluster-state storm-id)
+              ;(.setup-heartbeats! storm-cluster-state storm-id)
               (let [thrift-status->kw-status {TopologyInitialStatus/INACTIVE :inactive
                                               TopologyInitialStatus/ACTIVE :active}]
                 (start-storm nimbus storm-name storm-id (thrift-status->kw-status (.get_initial_status submitOptions))))
-              (mk-assignments nimbus)))
+              (mk-assignments nimbus))))
           (catch Throwable e
             (log-warn-error e "Topology submission exception. (topology name='" storm-name "')")
             (throw e))))

@@ -223,7 +223,7 @@
      :storm-id (:storm-id worker)
      :conf (:conf worker)
      :shared-executor-data (HashMap.)
-     :storm-active-atom (:storm-active-atom worker)
+     :storm-active-atom (atom true)
      :batch-transfer-queue batch-transfer->worker
      :transfer-fn (mk-executor-transfer-fn batch-transfer->worker)
      :suicide-fn (:suicide-fn worker)
@@ -649,7 +649,7 @@
     [(async-loop
       (fn []
         ;; If topology was started in inactive state, don't call prepare bolt until it's activated first.
-        (while (not @(:storm-active-atom executor-data))          
+        (while (not @(:storm-active-atom executor-data))
           (Thread/sleep 100))
         
         (log-message "Preparing bolt " component-id ":" (keys task-datas))

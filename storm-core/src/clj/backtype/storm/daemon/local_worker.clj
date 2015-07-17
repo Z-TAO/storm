@@ -404,35 +404,37 @@
   (when (= :distributed (cluster-mode conf))
     (touch (worker-pid-path conf worker-id (process-pid))))
   (let [worker (worker-data conf shared-mq-context storm-id assignment-id port worker-id topology storm-conf executor->node+port)
-        heartbeat-fn #(do-heartbeat worker)
+        ;heartbeat-fn #(do-heartbeat worker)
 
         ;; do this here so that the worker process dies if this fails
         ;; it's important that worker heartbeat to supervisor ASAP when launching so that the supervisor knows it's running (and can move on)
-        _ (heartbeat-fn)
+        ;_ (heartbeat-fn)
  
         executors (atom nil)
         ;; launch heartbeat threads immediately so that slow-loading tasks don't cause the worker to timeout
         ;; to the supervisor
-        _ (schedule-recurring (:heartbeat-timer worker) 0 (conf WORKER-HEARTBEAT-FREQUENCY-SECS) heartbeat-fn)
-        _ (schedule-recurring (:executor-heartbeat-timer worker) 0 (conf TASK-HEARTBEAT-FREQUENCY-SECS) #(do-executor-heartbeats worker :executors @executors))
+        ;_ (schedule-recurring (:heartbeat-timer worker) 0 (conf WORKER-HEARTBEAT-FREQUENCY-SECS) heartbeat-fn)
+        ;_ (schedule-recurring (:executor-heartbeat-timer worker) 0 (conf TASK-HEARTBEAT-FREQUENCY-SECS) #(do-executor-heartbeats worker :executors @executors))
 
-        receive-thread-shutdown (launch-receive-thread worker)
+        ;receive-thread-shutdown (launch-receive-thread worker)
         
-        refresh-connections (mk-refresh-connections worker)
+        ;refresh-connections (mk-refresh-connections worker)
 
-        _ (refresh-connections nil)
+        ;_ (refresh-connections nil)
 
-        _ (activate-worker-when-all-connections-ready worker)
+        ;_ (activate-worker-when-all-connections-ready worker)
 
-        _ (refresh-storm-active worker nil)
+        ;_ (refresh-storm-active worker nil)
 
  
         _ (reset! executors (dofor [e (:executors worker)] (executor/mk-executor worker e)))
         
-        transfer-tuples (mk-transfer-tuples-handler worker)
+        ;transfer-tuples (mk-transfer-tuples-handler worker)
         
-        transfer-thread (disruptor/consume-loop* (:transfer-queue worker) transfer-tuples)                                       
-        shutdown* (fn []
+        ;transfer-thread (disruptor/consume-loop* (:transfer-queue worker) transfer-tuples)
+        shutdown* (println "shut down"
+                    (comment
+                    fn []
                     (log-message "Shutting down worker " storm-id " " assignment-id " " port)
                     (doseq [[_ socket] @(:cached-node+port->socket worker)]
                       ;; this will do best effort flushing since the linger period
@@ -469,7 +471,7 @@
                     (log-message "Disconnecting from storm cluster state context")
                     (.disconnect (:storm-cluster-state worker))
                     (.close (:cluster-state worker))
-                    (log-message "Shut down worker " storm-id " " assignment-id " " port))
+                    (log-message "Shut down worker " storm-id " " assignment-id " " port)))
         ret (reify
              Shutdownable
              (shutdown
@@ -486,8 +488,8 @@
                  ))
              )]
     
-    (schedule-recurring (:refresh-connections-timer worker) 0 (conf TASK-REFRESH-POLL-SECS) refresh-connections)
-    (schedule-recurring (:refresh-active-timer worker) 0 (conf TASK-REFRESH-POLL-SECS) (partial refresh-storm-active worker))
+    ;(schedule-recurring (:refresh-connections-timer worker) 0 (conf TASK-REFRESH-POLL-SECS) refresh-connections)
+    ;(schedule-recurring (:refresh-active-timer worker) 0 (conf TASK-REFRESH-POLL-SECS) (partial refresh-storm-active worker))
 
     (log-message "Worker has topology config " (:storm-conf worker))
     (log-message "Worker " worker-id " for storm " storm-id " on " assignment-id ":" port " has finished loading")
