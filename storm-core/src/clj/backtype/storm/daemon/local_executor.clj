@@ -13,7 +13,7 @@
 ;; WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ;; See the License for the specific language governing permissions and
 ;; limitations under the License.
-(ns backtype.storm.daemon.local_executor
+(ns backtype.storm.daemon.local-executor
   (:use [backtype.storm.daemon common])
   (:use [backtype.storm bootstrap])
   (:import [backtype.storm.hooks ITaskHook])
@@ -227,7 +227,7 @@
      :batch-transfer-queue batch-transfer->worker
      :transfer-fn (mk-executor-transfer-fn batch-transfer->worker)
      :suicide-fn (:suicide-fn worker)
-     :storm-cluster-state (cluster/mk-storm-cluster-state (:cluster-state worker))
+     ;:storm-cluster-state (cluster/mk-storm-cluster-state (:cluster-state worker))
      :type executor-type
      ;; TODO: should refactor this to be part of the executor specific map (spout or bolt with :common field)
      :stats (mk-executor-stats <> (sampling-rate storm-conf))

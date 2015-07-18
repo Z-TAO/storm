@@ -227,7 +227,6 @@
    })
 
 (defn sync-processes [supervisor]
-  (comment
   (let [conf (:conf supervisor)
         download-lock (:download-lock supervisor)
         ^LocalState local-state (:local-state supervisor)
@@ -313,7 +312,7 @@
                   (log-message "Unable to launch worker due to "
                                (.getMessage e))))
               id))
-     ))))
+     )))
 
 (defn assigned-storm-ids-from-port-assignments [assignment]
   (->> assignment
@@ -338,7 +337,6 @@
 
 (defn mk-synchronize-supervisor [supervisor sync-processes event-manager processes-event-manager]
   (fn this []
-    (comment
     (let [conf (:conf supervisor)
           download-lock (:download-lock supervisor)
           storm-cluster-state (:storm-cluster-state supervisor)
@@ -399,12 +397,11 @@
             (catch Exception e (log-message (.getMessage e))))
           ))
       (.add processes-event-manager sync-processes)
-      ))))
+      )))
 
 ;; in local state, supervisor stores who its current assignments are
 ;; another thread launches events to restart any dead processes if necessary
 (defserverfn mk-supervisor [conf shared-context ^ISupervisor isupervisor]
-  (comment
   (log-message "Starting Supervisor with conf " conf)
   (.prepare isupervisor conf (supervisor-isupervisor-dir conf))
   (FileUtils/cleanDirectory (File. (supervisor-tmp-dir conf)))
@@ -463,7 +460,7 @@
            (and
             (timer-waiting? (:timer supervisor))
             (every? (memfn waiting?) managers)))
-           )))))
+           ))))
 
 (defn kill-supervisor [supervisor]
   (.shutdown supervisor)

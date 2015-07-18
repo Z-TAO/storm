@@ -19,7 +19,7 @@
   (:gen-class))
 
 (def begin-time (System/currentTimeMillis))
-(def check-init true)
+(def check-init false)
 (def total-counts (atom 0))
 (defspout sentence-spout ["sentence"]
   [conf context collector]
@@ -46,7 +46,7 @@
 
 (defspout sentence-spout-parameterized ["word"] {:params [sentences] :prepare false}
   [collector]
-  (Thread/sleep 100)
+  ;(Thread/sleep 100)
   (emit-spout! collector [(rand-nth sentences)]))
 
 (defbolt split-sentence ["word"] [tuple collector]
@@ -69,7 +69,7 @@
           (if (= (mod (@counts word) 10000) 0)
             (locking *out*
               (println "the output word" word "reached" (@counts word))))
-          (if (> @total-counts 2000000)
+          (if (> @total-counts 20000000)
             ;(println "the output word" word "reached" (@counts word)))
             (do
               ;(println "the output word" word "reached" (@counts word))
@@ -82,12 +82,12 @@
 
   (topology
     {"1" (spout-spec sentence-spout :p 1)
-     ;"2" (spout-spec (sentence-spout-parameterized
-     ;                  ["the cat jumped over the door"
-     ;                   "greetings from a faraway land"])
-     ;      :p 1)
+     "2" (spout-spec (sentence-spout-parameterized
+                       ["the cat jumped over the door"
+                        "greetings from a faraway land"])
+           :p 1)
      }
-    {"3" (bolt-spec {"1" :shuffle ;"2" :shuffle
+    {"3" (bolt-spec {"1" :shuffle "2" :shuffle
                      }
            split-sentence
            :p 5)

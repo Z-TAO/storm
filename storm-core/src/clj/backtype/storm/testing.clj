@@ -119,18 +119,18 @@
 ;; can customize the supervisors (except for ports) by passing in map for :supervisors parameter
 ;; if need to customize amt of ports more, can use add-supervisor calls afterwards
 (defnk mk-local-storm-cluster [:supervisors 1 :ports-per-supervisor 1 :daemon-conf {} :inimbus nil :supervisor-slot-port-min 1024]
-  (let [zk-tmp (local-temp-path)
-        [zk-port zk-handle] (if-not (contains? daemon-conf STORM-ZOOKEEPER-SERVERS)
-                              (zk/mk-inprocess-zookeeper zk-tmp))
+  (let [;zk-tmp (local-temp-path)
+        ;[zk-port zk-handle] (if-not (contains? daemon-conf STORM-ZOOKEEPER-SERVERS)
+        ;                      (zk/mk-inprocess-zookeeper zk-tmp))
         daemon-conf (merge (read-storm-config)
                            {TOPOLOGY-SKIP-MISSING-KRYO-REGISTRATIONS true
                             ZMQ-LINGER-MILLIS 0
                             TOPOLOGY-ENABLE-MESSAGE-TIMEOUTS false
                             TOPOLOGY-TRIDENT-BATCH-EMIT-INTERVAL-MILLIS 50
                             STORM-CLUSTER-MODE "local"}
-                           (if-not (contains? daemon-conf STORM-ZOOKEEPER-SERVERS)
-                             {STORM-ZOOKEEPER-PORT zk-port
-                              STORM-ZOOKEEPER-SERVERS ["localhost"]})
+                           ;(if-not (contains? daemon-conf STORM-ZOOKEEPER-SERVERS)
+                           ;  {STORM-ZOOKEEPER-PORT zk-port
+                           ;   STORM-ZOOKEEPER-SERVERS ["localhost"]})
                            daemon-conf)
         nimbus-tmp (local-temp-path)
         port-counter (mk-counter supervisor-slot-port-min)
@@ -142,16 +142,17 @@
                      :port-counter port-counter
                      :daemon-conf daemon-conf
                      :supervisors (atom [])
-                     :state (mk-distributed-cluster-state daemon-conf)
-                     :storm-cluster-state (mk-storm-cluster-state daemon-conf)
-                     :tmp-dirs (atom [nimbus-tmp zk-tmp])
-                     :zookeeper (if (not-nil? zk-handle) zk-handle)
+                     ;:state (mk-distributed-cluster-state daemon-conf)
+                     ;:storm-cluster-state (mk-storm-cluster-state daemon-conf)
+                     :tmp-dirs (atom [nimbus-tmp])
+                     ;:zookeeper (if (not-nil? zk-handle) zk-handle)
                      :shared-context context}
-        supervisor-confs (if (sequential? supervisors)
-                           supervisors
-                           (repeat supervisors {}))]
-    (doseq [sc supervisor-confs]
-      (add-supervisor cluster-map :ports ports-per-supervisor :conf sc))
+        ;supervisor-confs (if (sequential? supervisors)
+        ;                   supervisors
+        ;                   (repeat supervisors {}))
+        ]
+    ;(doseq [sc supervisor-confs]
+    ;  (add-supervisor cluster-map :ports ports-per-supervisor :conf sc))
     cluster-map))
 
 (defn get-supervisor [cluster-map supervisor-id]

@@ -22,7 +22,7 @@
   (:import [java.io FileNotFoundException])
   (:import [java.nio.channels Channels WritableByteChannel])
   (:import [java.net URI])
-  (:require [backtype.storm.daemon [local_worker :as worker]])
+  (:require [backtype.storm.daemon [local-worker :as worker] [local-executor :as executor] [task :as task]])
   (:use [backtype.storm.scheduler.DefaultScheduler])
   (:import [backtype.storm.scheduler INimbus SupervisorDetails WorkerSlot TopologyDetails
             Cluster Topologies SchedulerAssignment SchedulerAssignmentImpl DefaultScheduler ExecutorDetails])
@@ -95,7 +95,7 @@
     {:conf conf
      :inimbus inimbus
      :submitted-count (atom 0)
-     :storm-cluster-state (cluster/mk-storm-cluster-state conf)
+     ;:storm-cluster-state (cluster/mk-storm-cluster-state conf)
      :submit-lock (Object.)
      :heartbeats-cache (atom {})
      :downloaders (file-cache-map conf)
@@ -974,9 +974,9 @@
   (log-message "Starting Nimbus with conf " conf)
   (let [nimbus (nimbus-data conf inimbus)]
     (.prepare ^backtype.storm.nimbus.ITopologyValidator (:validator nimbus) conf)
-    (cleanup-corrupt-topologies! nimbus)
-    (doseq [storm-id (.active-storms (:storm-cluster-state nimbus))]
-      (transition! nimbus storm-id :startup))
+    ;(cleanup-corrupt-topologies! nimbus)
+    ;(doseq [storm-id (.active-storms (:storm-cluster-state nimbus))]
+    ;  (transition! nimbus storm-id :startup))
     ;(schedule-recurring (:timer nimbus)
     ;                    0
     ;                    (conf NIMBUS-MONITOR-FREQ-SECS)
@@ -987,12 +987,12 @@
     ;                      (do-cleanup nimbus)
     ;                      ))
     ;; Schedule Nimbus inbox cleaner
-    (schedule-recurring (:timer nimbus)
-                        0
-                        (conf NIMBUS-CLEANUP-INBOX-FREQ-SECS)
-                        (fn []
-                          (clean-inbox (inbox nimbus) (conf NIMBUS-INBOX-JAR-EXPIRATION-SECS))
-                          ))    
+    ;(schedule-recurring (:timer nimbus)
+    ;                    0
+    ;                    (conf NIMBUS-CLEANUP-INBOX-FREQ-SECS)
+    ;                    (fn []
+    ;                      (clean-inbox (inbox nimbus) (conf NIMBUS-INBOX-JAR-EXPIRATION-SECS))
+    ;                      ))
     (reify Nimbus$Iface
       (^void submitTopologyWithOpts
         [this ^String storm-name ^String uploadedJarLocation ^String serializedConf ^StormTopology topology
@@ -1021,7 +1021,8 @@
                             topology)
                 total-storm-conf (merge conf storm-conf)
                 topology (normalize-topology total-storm-conf topology)
-                storm-cluster-state (:storm-cluster-state nimbus)]
+                ;storm-cluster-state (:storm-cluster-state nimbus)
+                ]
             (system-topology! total-storm-conf topology) ;; this validates the structure of the topology
             (log-message "Received topology submission for " storm-name " with conf " storm-conf)
             ;; lock protects against multiple topologies being submitted at once and
@@ -1054,7 +1055,7 @@
                   ]
               (download-storm-code total-storm-conf storm-id master-source-dir)
               (local-mkdirs (worker-pids-root total-storm-conf worker-id))
-              (let [worker (worker/mk-worker
+              (let [worker (worker/worker-data
                              conf
                              share-context
                              storm-id
@@ -1063,17 +1064,31 @@
                              worker-id
                              topology
                              total-storm-conf
-                             executor->node+port)]
+                             executor->node+port)
+                    executors (dofor [e (:executors worker)]
+                                (let [executor-data (executor/mk-executor-data worker e)
+                                      task-datas (->> executor-data
+                                                   :task-ids
+                                                   (map (fn [t] [t (task/mk-task executor-data t)]))
+                                                   (into {})
+                                                   (HashMap.))
+                                      report-error-and-die (:report-error-and-die executor-data)]
+                                  (executor/start-batch-transfer->worker-handler! worker executor-data)
+                                  (executor/mk-threads executor-data task-datas)
+
+                                  ))]
+
                 (psim/register-process worker-id worker)))
 
-            (comment
-            (locking (:submit-lock nimbus)
-              (setup-storm-code conf storm-id uploadedJarLocation storm-conf topology)
-              ;(.setup-heartbeats! storm-cluster-state storm-id)
-              (let [thrift-status->kw-status {TopologyInitialStatus/INACTIVE :inactive
-                                              TopologyInitialStatus/ACTIVE :active}]
-                (start-storm nimbus storm-name storm-id (thrift-status->kw-status (.get_initial_status submitOptions))))
-              (mk-assignments nimbus))))
+            ;(comment
+            ;(locking (:submit-lock nimbus)
+            ;  (setup-storm-code conf storm-id uploadedJarLocation storm-conf topology)
+            ;  ;(.setup-heartbeats! storm-cluster-state storm-id)
+            ;  (let [thrift-status->kw-status {TopologyInitialStatus/INACTIVE :inactive
+            ;                                  TopologyInitialStatus/ACTIVE :active}]
+            ;    (start-storm nimbus storm-name storm-id (thrift-status->kw-status (.get_initial_status submitOptions))))
+            ;  (mk-assignments nimbus)))
+            )
           (catch Throwable e
             (log-warn-error e "Topology submission exception. (topology name='" storm-name "')")
             (throw e))))

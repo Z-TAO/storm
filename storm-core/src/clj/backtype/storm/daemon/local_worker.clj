@@ -13,10 +13,10 @@
 ;; WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ;; See the License for the specific language governing permissions and
 ;; limitations under the License.
-(ns backtype.storm.daemon.local_worker
+(ns backtype.storm.daemon.local-worker
   (:use [backtype.storm.daemon common])
   (:use [backtype.storm bootstrap])
-  (:require [backtype.storm.daemon [local_executor :as executor]])
+  (:require [backtype.storm.daemon [local-executor :as executor]])
   (:import [java.util.concurrent Executors])
   (:import [java.util ArrayList HashMap])
   (:import [backtype.storm.utils TransferDrainer])
@@ -187,8 +187,8 @@
 
 (defn worker-data [conf mq-context storm-id assignment-id port worker-id topology storm-conf executor->node+port]
   (let [assignment-versions (atom {})
-        cluster-state (cluster/mk-distributed-cluster-state conf)
-        storm-cluster-state (cluster/mk-storm-cluster-state cluster-state)
+        ;cluster-state (cluster/mk-distributed-cluster-state conf)
+        ;storm-cluster-state (cluster/mk-storm-cluster-state cluster-state)
         transfer-queue (disruptor/disruptor-queue "worker-transfer-queue" (storm-conf TOPOLOGY-TRANSFER-BUFFER-SIZE)
                                                   :wait-strategy (storm-conf TOPOLOGY-DISRUPTOR-WAIT-STRATEGY))
 
@@ -207,8 +207,9 @@
       :assignment-id assignment-id
       :port (int port)
       :worker-id worker-id
-      :cluster-state cluster-state
-      :storm-cluster-state storm-cluster-state
+      ;:cluster-state cluster-state
+      ;:storm-cluster-state storm-cluster-state
+
       ;; when worker bootup, worker will start to setup initial connections to
       ;; other workers. When all connection is ready, we will enable this flag
       ;; and spout and bolt will be activated.
@@ -433,45 +434,45 @@
         
         ;transfer-thread (disruptor/consume-loop* (:transfer-queue worker) transfer-tuples)
         shutdown* (println "shut down"
-                    (comment
-                    fn []
-                    (log-message "Shutting down worker " storm-id " " assignment-id " " port)
-                    (doseq [[_ socket] @(:cached-node+port->socket worker)]
-                      ;; this will do best effort flushing since the linger period
-                      ;; was set on creation
-                      (.close socket))
-                    (log-message "Shutting down receive thread")
-                    (receive-thread-shutdown)
-                    (log-message "Shut down receive thread")
-                    (log-message "Terminating messaging context")
-                    (log-message "Shutting down executors")
-                    (doseq [executor @executors] (.shutdown executor))
-                    (log-message "Shut down executors")
+                   ; fn []
+                   ; (log-message "Shutting down worker " storm-id " " assignment-id " " port)
+                   ; (doseq [[_ socket] @(:cached-node+port->socket worker)]
+                   ;   ;; this will do best effort flushing since the linger period
+                   ;   ;; was set on creation
+                   ;   (.close socket))
+                   ; (log-message "Shutting down receive thread")
+                   ; (receive-thread-shutdown)
+                   ; (log-message "Shut down receive thread")
+                   ; (log-message "Terminating messaging context")
+                   ; (log-message "Shutting down executors")
+                   ; (doseq [executor @executors] (.shutdown executor))
+                   ; (log-message "Shut down executors")
                                         
                     ;;this is fine because the only time this is shared is when it's a local context,
                     ;;in which case it's a noop
-                    (.term ^IContext (:mq-context worker))
-                    (log-message "Shutting down transfer thread")
-                    (disruptor/halt-with-interrupt! (:transfer-queue worker))
+                   ; (.term ^IContext (:mq-context worker))
+                   ; (log-message "Shutting down transfer thread")
+                   ; (disruptor/halt-with-interrupt! (:transfer-queue worker))
 
-                    (.interrupt transfer-thread)
-                    (.join transfer-thread)
-                    (log-message "Shut down transfer thread")
-                    (cancel-timer (:heartbeat-timer worker))
-                    (cancel-timer (:refresh-connections-timer worker))
-                    (cancel-timer (:refresh-active-timer worker))
-                    (cancel-timer (:executor-heartbeat-timer worker))
-                    (cancel-timer (:user-timer worker))
+                   ; (.interrupt transfer-thread)
+                   ; (.join transfer-thread)
+                   ; (log-message "Shut down transfer thread")
+                   ; (cancel-timer (:heartbeat-timer worker))
+                   ; (cancel-timer (:refresh-connections-timer worker))
+                   ; (cancel-timer (:refresh-active-timer worker))
+                   ; (cancel-timer (:executor-heartbeat-timer worker))
+                   ; (cancel-timer (:user-timer worker))
                     
-                    (close-resources worker)
+                   ; (close-resources worker)
                     
                     ;; TODO: here need to invoke the "shutdown" method of WorkerHook
                     
-                    (.remove-worker-heartbeat! (:storm-cluster-state worker) storm-id assignment-id port)
-                    (log-message "Disconnecting from storm cluster state context")
-                    (.disconnect (:storm-cluster-state worker))
-                    (.close (:cluster-state worker))
-                    (log-message "Shut down worker " storm-id " " assignment-id " " port)))
+                   ; (.remove-worker-heartbeat! (:storm-cluster-state worker) storm-id assignment-id port)
+                   ; (log-message "Disconnecting from storm cluster state context")
+                   ; (.disconnect (:storm-cluster-state worker))
+                   ; (.close (:cluster-state worker))
+                   ; (log-message "Shut down worker " storm-id " " assignment-id " " port)
+                   )
         ret (reify
              Shutdownable
              (shutdown
