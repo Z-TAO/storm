@@ -19,24 +19,34 @@
   (:gen-class))
 
 (def begin-time (System/currentTimeMillis))
-(def check-init false)
+(def init-time (atom nil))
 (def total-counts (atom 0))
+(def real-total-counts (atom 0))
+(def first-time (atom true))
+
+
 (defspout sentence-spout ["sentence"]
   [conf context collector]
-  (let [sentences ["a little brown dog"
-                   "the man petted the dog"
-                   "four score and seven years ago"
-                   "an apple a day keeps the doctor away"]]
+  (let [sentences ["dog"
+                   "dog"
+                   "dog"
+                   "dog"]]
     (spout
       (nextTuple []
         ;(Thread/sleep 1)
-        (if (= check-init true)
+        (if (= @first-time true)
           (do
-            (locking *out*
-              (println "process done in " (/ (- (System/currentTimeMillis) begin-time) 1000.0) "seconds"))
-            (System/exit 0)
+            (let [passed-time (- (System/currentTimeMillis) begin-time)]
+              (reset! init-time passed-time))
+            (reset! first-time false)
             ))
-        (emit-spout! collector [(rand-nth sentences)])
+        (swap! real-total-counts + 1)
+        (if (> @real-total-counts 20000000)
+          (do
+            (println "maximun tuples reached")
+            (Thread/sleep 1000000000))
+          (emit-spout! collector [(rand-nth sentences)])
+          )
         )
       (ack [id]
         ;; You only need to define this method for reliable spouts
@@ -46,7 +56,7 @@
 
 (defspout sentence-spout-parameterized ["word"] {:params [sentences] :prepare false}
   [collector]
-  ;(Thread/sleep 100)
+  ;(Thread/sleep 1)
   (emit-spout! collector [(rand-nth sentences)]))
 
 (defbolt split-sentence ["word"] [tuple collector]
@@ -66,34 +76,36 @@
           (swap! total-counts + 1)
           (emit-bolt! collector [word (@counts word)] :anchor tuple)
           (ack! collector tuple)
-          (if (= (mod (@counts word) 10000) 0)
+          (if (= (mod (@counts word) 1000) 0)
             (locking *out*
               (println "the output word" word "reached" (@counts word))))
-          (if (> @total-counts 20000000)
+          (if (>= @total-counts 20000000)
             ;(println "the output word" word "reached" (@counts word)))
             (do
-              ;(println "the output word" word "reached" (@counts word))
               (locking *out*
-                (println "process done in " (/ (- (System/currentTimeMillis) begin-time) 1000.0) "seconds"))
+                (println "the real output is" @real-total-counts)
+                (println "the output reached" @total-counts)
+                (println "init done in " (/ @init-time 1000.0) "seconds")
+                (println "process done in " (/ (- (- (System/currentTimeMillis) begin-time) @init-time) 1000.0) "seconds"))
               (System/exit 0)))
           )))))
 
 (defn mk-topology []
 
   (topology
-    {"1" (spout-spec sentence-spout :p 1)
-     "2" (spout-spec (sentence-spout-parameterized
-                       ["the cat jumped over the door"
-                        "greetings from a faraway land"])
-           :p 1)
+    {"spout" (spout-spec sentence-spout :p 2)
+     ;"2" (spout-spec (sentence-spout-parameterized
+     ;                  ["dog"
+     ;                   "dog"])
+     ;      :p 0)
      }
-    {"3" (bolt-spec {"1" :shuffle "2" :shuffle
+    {"split" (bolt-spec {"spout" :shuffle ;"2" :shuffle
                      }
            split-sentence
-           :p 5)
-     "4" (bolt-spec {"3" ["word"]}
+           :p 4)
+     "wordcount" (bolt-spec {"split" ["word"]}
            word-count
-           :p 6)}))
+           :p 4)}))
 
 (defn run-local! []
   (let [cluster (LocalCluster.)]

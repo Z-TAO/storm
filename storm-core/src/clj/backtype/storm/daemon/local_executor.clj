@@ -479,7 +479,7 @@
                 :let [^ISpout spout-obj (:object task-data)
                       tasks-fn (:tasks-fn task-data)
                       send-spout-msg (fn [out-stream-id values message-id out-task-id]
-                                       (.increment emitted-count)
+                                       ;(.increment emitted-count)
                                        (let [out-tasks (if out-task-id
                                                          (tasks-fn out-task-id out-stream-id values)
                                                          (tasks-fn out-stream-id values))
@@ -515,10 +515,10 @@
                                                             (if (sampler) 0))))
                                          (or out-tasks [])
                                          ))]]
-          (builtin-metrics/register-all (:builtin-metrics task-data) storm-conf (:user-context task-data))
-          (builtin-metrics/register-queue-metrics {:sendqueue (:batch-transfer-queue executor-data)
-                                                   :receive receive-queue}
-                                                  storm-conf (:user-context task-data))
+          ;(builtin-metrics/register-all (:builtin-metrics task-data) storm-conf (:user-context task-data))
+          ;(builtin-metrics/register-queue-metrics {:sendqueue (:batch-transfer-queue executor-data)
+          ;                                         :receive receive-queue}
+          ;                                        storm-conf (:user-context task-data))
 
           (.open spout-obj
                  storm-conf
@@ -542,7 +542,7 @@
         (disruptor/consumer-started! (:receive-queue executor-data))
         (fn []
           ;; This design requires that spouts be non-blocking
-          (disruptor/consume-batch receive-queue event-handler)
+          ;(disruptor/consume-batch receive-queue event-handler)
           
           ;; try to clear the overflow-buffer
           (try-cause
@@ -573,11 +573,12 @@
                     (fast-list-iter [^ISpout spout spouts] (.deactivate spout)))
                   ;; TODO: log that it's getting throttled
                   (Time/sleep 100))))
-            (if (and (= curr-count (.get emitted-count)) active?)
-              (do (.increment empty-emit-streak)
-                  (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
-              (.set empty-emit-streak 0)
-              ))           
+            ;(if (and (= curr-count (.get emitted-count)) active?)
+            ;  (do (.increment empty-emit-streak)
+            ;      (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
+            ;  (.set empty-emit-streak 0)
+            ;  )
+            )
           0))
       :kill-fn (:report-error-and-die executor-data)
       :factory? true
