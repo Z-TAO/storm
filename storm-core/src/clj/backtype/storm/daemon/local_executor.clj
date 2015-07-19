@@ -390,13 +390,13 @@
 (defn mk-task-receiver [executor-data tuple-action-fn]
   (let [^KryoTupleDeserializer deserializer (:deserializer executor-data)
         task-ids (:task-ids executor-data)
-        debug? (= true (-> executor-data :storm-conf (get TOPOLOGY-DEBUG)))
+        ;debug? (= true (-> executor-data :storm-conf (get TOPOLOGY-DEBUG)))
         ]
     (disruptor/clojure-handler
       (fn [tuple-batch sequence-id end-of-batch?]
         (fast-list-iter [[task-id msg] tuple-batch]
           (let [^TupleImpl tuple (if (instance? Tuple msg) msg (.deserialize deserializer msg))]
-            (when debug? (log-message "Processing received message " tuple))
+            ;(when debug? (log-message "Processing received message " tuple))
             (if task-id
               (tuple-action-fn task-id tuple)
               ;; null task ids are broadcast tuples
@@ -430,26 +430,29 @@
                    (expire [this msg-id [task-id spout-id tuple-info start-time-ms]]
                      (let [time-delta (if start-time-ms (time-delta-ms start-time-ms))]
                        (fail-spout-msg executor-data (get task-datas task-id) spout-id tuple-info time-delta)
-                       ))))
+                       )
+                     )))
         tuple-action-fn (fn [task-id ^TupleImpl tuple]
-                          (let [stream-id (.getSourceStreamId tuple)]
-                            (condp = stream-id
-                              Constants/SYSTEM_TICK_STREAM_ID (.rotate pending)
-                              Constants/METRICS_TICK_STREAM_ID (metrics-tick executor-data (get task-datas task-id) tuple)
-                              (let [id (.getValue tuple 0)
-                                    [stored-task-id spout-id tuple-finished-info start-time-ms] (.remove pending id)]
-                                (when spout-id
-                                  (when-not (= stored-task-id task-id)
-                                    (throw-runtime "Fatal error, mismatched task ids: " task-id " " stored-task-id))
-                                  (let [time-delta (if start-time-ms (time-delta-ms start-time-ms))]
-                                    (condp = stream-id
-                                      ACKER-ACK-STREAM-ID (ack-spout-msg executor-data (get task-datas task-id)
-                                                                         spout-id tuple-finished-info time-delta)
-                                      ACKER-FAIL-STREAM-ID (fail-spout-msg executor-data (get task-datas task-id)
-                                                                           spout-id tuple-finished-info time-delta)
-                                      )))
+                          ;(let [stream-id (.getSourceStreamId tuple)]
+                          ;  (condp = stream-id
+                          ;    Constants/SYSTEM_TICK_STREAM_ID (.rotate pending)
+                          ;    Constants/METRICS_TICK_STREAM_ID (metrics-tick executor-data (get task-datas task-id) tuple)
+                          ;    (let [id (.getValue tuple 0)
+                          ;          [stored-task-id spout-id tuple-finished-info start-time-ms] (.remove pending id)]
+                                ;(when spout-id
+                                ;  (when-not (= stored-task-id task-id)
+                                ;    (throw-runtime "Fatal error, mismatched task ids: " task-id " " stored-task-id))
+                                ;  ;(let [time-delta (if start-time-ms (time-delta-ms start-time-ms))]
+                                ;  ;  (condp = stream-id
+                                ;  ;    ACKER-ACK-STREAM-ID (ack-spout-msg executor-data (get task-datas task-id)
+                                ;  ;                                       spout-id tuple-finished-info time-delta)
+                                ;  ;    ACKER-FAIL-STREAM-ID (fail-spout-msg executor-data (get task-datas task-id)
+                                ;  ;                                         spout-id tuple-finished-info time-delta)
+                                ;  ;    ))
+                                ;  )
                                 ;; TODO: on failure, emit tuple to failure stream
-                                ))))
+                          ;      )))
+                          )
         receive-queue (:receive-queue executor-data)
         event-handler (mk-task-receiver executor-data tuple-action-fn)
         has-ackers? (has-ackers? storm-conf)
@@ -622,27 +625,29 @@
                               Constants/METRICS_TICK_STREAM_ID (metrics-tick executor-data (get task-datas task-id) tuple)
                               (let [task-data (get task-datas task-id)
                                     ^IBolt bolt-obj (:object task-data)
-                                    user-context (:user-context task-data)
-                                    sampler? (sampler)
-                                    execute-sampler? (execute-sampler)
-                                    now (if (or sampler? execute-sampler?) (System/currentTimeMillis))]
-                                (when sampler?
-                                  (.setProcessSampleStartTime tuple now))
-                                (when execute-sampler?
-                                  (.setExecuteSampleStartTime tuple now))
+                                    ;user-context (:user-context task-data)
+                                    ;sampler? (sampler)
+                                    ;execute-sampler? (execute-sampler)
+                                    ;now (if (or sampler? execute-sampler?) (System/currentTimeMillis))
+                                    ]
+                                ;(when sampler?
+                                ;  (.setProcessSampleStartTime tuple now))
+                                ;(when execute-sampler?
+                                ;  (.setExecuteSampleStartTime tuple now))
                                 (.execute bolt-obj tuple)
-                                (let [delta (tuple-execute-time-delta! tuple)]
-                                  (task/apply-hooks user-context .boltExecute (BoltExecuteInfo. tuple task-id delta))
-                                  (when delta
-                                    (builtin-metrics/bolt-execute-tuple! (:builtin-metrics task-data)
-                                                                         executor-stats
-                                                                         (.getSourceComponent tuple)                                                      
-                                                                         (.getSourceStreamId tuple)
-                                                                         delta)
-                                    (stats/bolt-execute-tuple! executor-stats
-                                                               (.getSourceComponent tuple)
-                                                               (.getSourceStreamId tuple)
-                                                               delta)))))))]
+                                ;(let [delta (tuple-execute-time-delta! tuple)]
+                                ;  (task/apply-hooks user-context .boltExecute (BoltExecuteInfo. tuple task-id delta))
+                                ;  (when delta
+                                ;    (builtin-metrics/bolt-execute-tuple! (:builtin-metrics task-data)
+                                ;                                         executor-stats
+                                ;                                         (.getSourceComponent tuple)
+                                ;                                         (.getSourceStreamId tuple)
+                                ;                                         delta)
+                                ;    (stats/bolt-execute-tuple! executor-stats
+                                ;                               (.getSourceComponent tuple)
+                                ;                               (.getSourceStreamId tuple)
+                                ;                               delta)))
+                                ))))]
     
     ;; TODO: can get any SubscribedState objects out of the context now
 
