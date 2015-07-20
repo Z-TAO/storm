@@ -538,8 +538,11 @@
         (reset! open-or-prepare-was-called? true) 
         (log-message "Opened spout " component-id ":" (keys task-datas))
         (setup-metrics! executor-data)
-        
+
         (disruptor/consumer-started! (:receive-queue executor-data))
+
+        (log-message "Activating spout " component-id ":" (keys task-datas))
+        (fast-list-iter [^ISpout spout spouts] (.activate spout))
         (fn []
           ;; This design requires that spouts be non-blocking
           ;(disruptor/consume-batch receive-queue event-handler)
@@ -552,9 +555,16 @@
                 (.removeFirst overflow-buffer)))
           (catch InsufficientCapacityException e
             ))
-          
+          (if (and (.isEmpty overflow-buffer)
+                (or (not max-spout-pending)
+                  (< (.size pending) max-spout-pending)))
+            (fast-list-iter [^ISpout spout spouts] (.nextTuple spout))
+            )
+
+          (comment
           (let [active? @(:storm-active-atom executor-data)
-                curr-count (.get emitted-count)]
+                ;curr-count (.get emitted-count)
+                ]
             (if (and (.isEmpty overflow-buffer)
                      (or (not max-spout-pending)
                          (< (.size pending) max-spout-pending)))
@@ -572,13 +582,14 @@
                     (log-message "Deactivating spout " component-id ":" (keys task-datas))
                     (fast-list-iter [^ISpout spout spouts] (.deactivate spout)))
                   ;; TODO: log that it's getting throttled
-                  (Time/sleep 100))))
+                  (Time/sleep 100)
+                  )))
             ;(if (and (= curr-count (.get emitted-count)) active?)
             ;  (do (.increment empty-emit-streak)
             ;      (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
             ;  (.set empty-emit-streak 0)
             ;  )
-            )
+            ))
           0))
       :kill-fn (:report-error-and-die executor-data)
       :factory? true
