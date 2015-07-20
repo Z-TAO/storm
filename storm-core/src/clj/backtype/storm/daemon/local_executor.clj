@@ -695,16 +695,16 @@
                                                                                stream
                                                                                (MessageId/makeId anchors-to-ids)))))
                                     (or out-tasks [])))]]
-          (builtin-metrics/register-all (:builtin-metrics task-data) storm-conf user-context)
-          (if (= component-id Constants/SYSTEM_COMPONENT_ID)
-            (builtin-metrics/register-queue-metrics {:sendqueue (:batch-transfer-queue executor-data)
-                                                     :receive (:receive-queue executor-data)
-                                                     :transfer (:transfer-queue (:worker executor-data))}
-                                                    storm-conf user-context)
-            (builtin-metrics/register-queue-metrics {:sendqueue (:batch-transfer-queue executor-data)
-                                                     :receive (:receive-queue executor-data)}
-                                                    storm-conf user-context)
-            )
+          ;(builtin-metrics/register-all (:builtin-metrics task-data) storm-conf user-context)
+          ;(if (= component-id Constants/SYSTEM_COMPONENT_ID)
+          ;  (builtin-metrics/register-queue-metrics {:sendqueue (:batch-transfer-queue executor-data)
+          ;                                           :receive (:receive-queue executor-data)
+          ;                                           :transfer (:transfer-queue (:worker executor-data))}
+          ;                                          storm-conf user-context)
+          ;  (builtin-metrics/register-queue-metrics {:sendqueue (:batch-transfer-queue executor-data)
+          ;                                           :receive (:receive-queue executor-data)}
+          ;                                          storm-conf user-context)
+          ;  )
 
           (.prepare bolt-obj
                     storm-conf
