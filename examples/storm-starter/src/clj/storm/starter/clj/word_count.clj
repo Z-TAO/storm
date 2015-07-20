@@ -128,4 +128,3 @@
   ([name]
     (submit-topology! name)))
 
-(-main)
