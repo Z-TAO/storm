@@ -236,7 +236,7 @@
      :stream->component->grouper (outbound-components worker-context component-id)
      :report-error (throttled-report-error-fn <>)
      :report-error-and-die (fn [error]
-                             ((:report-error <>) error)
+                             ;((:report-error <>) error)
                              ((:suicide-fn <>)))
      :deserializer (KryoTupleDeserializer. storm-conf worker-context)
      :sampler (mk-stats-sampler storm-conf)
@@ -357,7 +357,7 @@
         (doseq [user-context (map :user-context (vals task-datas))]
           (doseq [hook (.getHooks user-context)]
             (.cleanup hook)))
-        (.disconnect (:storm-cluster-state executor-data))
+        ;(.disconnect (:storm-cluster-state executor-data))
         (when @(:open-or-prepare-was-called? executor-data)
           (doseq [obj (map :object (vals task-datas))]
             (close-component executor-data obj)))

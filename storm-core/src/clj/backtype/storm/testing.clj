@@ -170,18 +170,18 @@
 
 (defn kill-local-storm-cluster [cluster-map]
   (.shutdown (:nimbus cluster-map))
-  (.close (:state cluster-map))
-  (.disconnect (:storm-cluster-state cluster-map))
+  ;(.close (:state cluster-map))
+  ;(.disconnect (:storm-cluster-state cluster-map))
   (doseq [s @(:supervisors cluster-map)]
     (.shutdown-all-workers s)
     ;; race condition here? will it launch the workers again?
     (supervisor/kill-supervisor s))
   (psim/kill-all-processes)
-  (if (not-nil? (:zookeeper cluster-map))
-    (do
-      (log-message "Shutting down in process zookeeper")
-      (zk/shutdown-inprocess-zookeeper (:zookeeper cluster-map))
-      (log-message "Done shutting down in process zookeeper")))
+  ;(if (not-nil? (:zookeeper cluster-map))
+  ;  (do
+  ;    (log-message "Shutting down in process zookeeper")
+  ;    (zk/shutdown-inprocess-zookeeper (:zookeeper cluster-map))
+  ;    (log-message "Done shutting down in process zookeeper")))
   (doseq [t @(:tmp-dirs cluster-map)]
     (log-message "Deleting temporary path " t)
     (try

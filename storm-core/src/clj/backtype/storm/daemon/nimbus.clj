@@ -738,35 +738,6 @@
                                                  (select-keys all-node->host all-nodes)
                                                  executor->node+port
                                                  start-times)}))]
-    (if (not-empty new-assignments)
-      ;(= 1 2)
-      ;;; newly buildin workers
-      (let [share-context (msg-loader/mk-local-context)
-            conf (:conf nimbus)
-            topology-id (key (first new-assignments))
-            assignment-id (first (val(first(val (first topology->executor->node+port)))))
-            port 1024
-            worker-id (uuid)
-            topology-detail (.getById topologies topology-id)
-            topology (.getTopology topology-detail)
-            topology-conf (.getConf topology-detail)
-            master-source-dir (:master-code-dir (val (first new-assignments)))
-            ]
-        (download-storm-code topology-conf topology-id master-source-dir)
-        (local-mkdirs (worker-pids-root topology-conf worker-id))
-        (let [worker (worker/mk-worker
-                       conf
-                       share-context
-                       topology-id
-                       assignment-id
-                       port
-                       worker-id
-                       topology
-                       topology-conf
-                       (val (first topology->executor->node+port)))]
-          (psim/register-process worker-id worker))
-
-        ))
 
 
 
@@ -1066,19 +1037,12 @@
                              total-storm-conf
                              executor->node+port)
                     executors (dofor [e (:executors worker)]
-                                (let [executor-data (executor/mk-executor-data worker e)
-                                      task-datas (->> executor-data
-                                                   :task-ids
-                                                   (map (fn [t] [t (task/mk-task executor-data t)]))
-                                                   (into {})
-                                                   (HashMap.))
-                                      report-error-and-die (:report-error-and-die executor-data)]
-                                  (executor/start-batch-transfer->worker-handler! worker executor-data)
-                                  (executor/mk-threads executor-data task-datas)
+                                (let [exe (executor/mk-executor worker e)]
+                                  (psim/register-process worker-id exe)
+                                  )
+                                )]
 
-                                  ))]
-
-                (psim/register-process worker-id worker)))
+                ))
 
             ;(comment
             ;(locking (:submit-lock nimbus)
@@ -1271,7 +1235,7 @@
       (shutdown [this]
         (log-message "Shutting down master")
         (cancel-timer (:timer nimbus))
-        (.disconnect (:storm-cluster-state nimbus))
+        ;(.disconnect (:storm-cluster-state nimbus))
         (.cleanup (:downloaders nimbus))
         (.cleanup (:uploaders nimbus))
         (log-message "Shut down master")
