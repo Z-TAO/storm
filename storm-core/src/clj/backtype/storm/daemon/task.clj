@@ -123,15 +123,16 @@
         component-id (:component-id executor-data)
         ^WorkerTopologyContext worker-context (:worker-context executor-data)
         storm-conf (:storm-conf executor-data)
-        emit-sampler (mk-stats-sampler storm-conf)
+        ;emit-sampler (mk-stats-sampler storm-conf)
         stream->component->grouper (:stream->component->grouper executor-data)
         user-context (:user-context task-data)
-        executor-stats (:stats executor-data)
-        debug? (= true (storm-conf TOPOLOGY-DEBUG))]
+        ;executor-stats (:stats executor-data)
+        ;debug? (= true (storm-conf TOPOLOGY-DEBUG))
+        ]
         
     (fn ([^Integer out-task-id ^String stream ^List values]
-          (when debug?
-            (log-message "Emitting direct: " out-task-id "; " component-id " " stream " " values))
+          ;(when debug?
+          ;  (log-message "Emitting direct: " out-task-id "; " component-id " " stream " " values))
           (let [target-component (.getComponentId worker-context out-task-id)
                 component->grouping (get stream->component->grouper stream)
                 grouping (get component->grouping target-component)
@@ -139,17 +140,17 @@
             (when (and (not-nil? grouping) (not= :direct grouping))
               (throw (IllegalArgumentException. "Cannot emitDirect to a task expecting a regular grouping")))                          
             (apply-hooks user-context .emit (EmitInfo. values stream task-id [out-task-id]))
-            (when (emit-sampler)
-              (builtin-metrics/emitted-tuple! (:builtin-metrics task-data) executor-stats stream)
-              (stats/emitted-tuple! executor-stats stream)
-              (if out-task-id
-                (stats/transferred-tuples! executor-stats stream 1)
-                (builtin-metrics/transferred-tuple! (:builtin-metrics task-data) executor-stats stream 1)))
+            ;(when (emit-sampler)
+            ;  (builtin-metrics/emitted-tuple! (:builtin-metrics task-data) executor-stats stream)
+            ;  (stats/emitted-tuple! executor-stats stream)
+            ;  (if out-task-id
+            ;    (stats/transferred-tuples! executor-stats stream 1)
+            ;    (builtin-metrics/transferred-tuple! (:builtin-metrics task-data) executor-stats stream 1)))
             (if out-task-id [out-task-id])
             ))
         ([^String stream ^List values]
-           (when debug?
-             (log-message "Emitting: " component-id " " stream " " values))
+           ; (when debug?
+           ;  (log-message "Emitting: " component-id " " stream " " values))
            (let [out-tasks (ArrayList.)]
              (fast-map-iter [[out-component grouper] (get stream->component->grouper stream)]
                (when (= :direct grouper)
@@ -161,11 +162,11 @@
                    (.add out-tasks comp-tasks)
                    )))
              (apply-hooks user-context .emit (EmitInfo. values stream task-id out-tasks))
-             (when (emit-sampler)
-               (stats/emitted-tuple! executor-stats stream)
-               (builtin-metrics/emitted-tuple! (:builtin-metrics task-data) executor-stats stream)              
-               (stats/transferred-tuples! executor-stats stream (count out-tasks))
-               (builtin-metrics/transferred-tuple! (:builtin-metrics task-data) executor-stats stream (count out-tasks)))
+             ;(when (emit-sampler)
+             ;  (stats/emitted-tuple! executor-stats stream)
+             ;  (builtin-metrics/emitted-tuple! (:builtin-metrics task-data) executor-stats stream)
+             ;  (stats/transferred-tuples! executor-stats stream (count out-tasks))
+             ;  (builtin-metrics/transferred-tuple! (:builtin-metrics task-data) executor-stats stream (count out-tasks)))
              out-tasks)))
     ))
 
