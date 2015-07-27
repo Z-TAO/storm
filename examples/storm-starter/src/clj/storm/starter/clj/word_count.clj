@@ -110,7 +110,7 @@
 (defn run-local! []
   (let [cluster (LocalCluster.)]
     (.submitTopology cluster "word-count" {TOPOLOGY-DEBUG false} (mk-topology))
-    (Thread/sleep 100000000)
+    (Thread/sleep 5000)
     (.shutdown cluster)
     ))
 
@@ -128,3 +128,4 @@
   ([name]
     (submit-topology! name)))
 
+(-main)

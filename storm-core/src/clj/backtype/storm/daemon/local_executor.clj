@@ -333,7 +333,8 @@
         system-threads [(start-batch-transfer->worker-handler! worker executor-data)]
         handlers (with-error-reaction report-error-and-die
                    (mk-threads executor-data task-datas))
-        threads (concat handlers system-threads)]    
+        threads (concat handlers system-threads)
+        ]
     ;(setup-ticks! worker executor-data)
 
     (log-message "Finished loading executor " component-id ":" (pr-str executor-id))
@@ -341,7 +342,8 @@
     (reify
       RunningExecutor
       (render-stats [this]
-        ;(stats/render-stats! (:stats executor-data)))
+        ;(stats/render-stats! (:stats executor-data))
+        )
       (get-executor-id [this]
         executor-id )
       Shutdownable
@@ -352,8 +354,12 @@
         (disruptor/halt-with-interrupt! (:batch-transfer-queue executor-data))
         (doseq [t threads]
           (.interrupt t)
-          (.join t))
-        
+         ; (.join t)
+          )
+        (doseq [t threads]
+          (.interrupt t)
+           ;(.join t)
+          )
         (doseq [user-context (map :user-context (vals task-datas))]
           (doseq [hook (.getHooks user-context)]
             (.cleanup hook)))
@@ -455,9 +461,9 @@
                           )
         receive-queue (:receive-queue executor-data)
         event-handler (mk-task-receiver executor-data tuple-action-fn)
-        has-ackers? (has-ackers? storm-conf)
-        emitted-count (MutableLong. 0)
-        empty-emit-streak (MutableLong. 0)
+       ; has-ackers? (has-ackers? storm-conf)
+       ; emitted-count (MutableLong. 0)
+       ; empty-emit-streak (MutableLong. 0)
         
         ;; the overflow buffer is used to ensure that spouts never block when emitting
         ;; this ensures that the spout can always clear the incoming buffer (acks and fails), which
@@ -552,7 +558,7 @@
         (fast-list-iter [^ISpout spout spouts] (.activate spout))
         (fn []
           ;; This design requires that spouts be non-blocking
-          ;(disruptor/consume-batch receive-queue event-handler)
+          (disruptor/consume-batch receive-queue event-handler)
           
           ;; try to clear the overflow-buffer
           (try-cause
@@ -623,7 +629,8 @@
                 open-or-prepare-was-called?]} executor-data
         rand (Random. (Utils/secureRandomLong))
         tuple-action-fn (fn [task-id ^TupleImpl tuple]
-                          (let [^IBolt bolt-obj (:object task-data)]
+                          (let [task-data (get task-datas task-id)
+                                 ^IBolt bolt-obj (:object task-data)]
                             (.execute bolt-obj tuple))
                           ;; synchronization needs to be done with a key provided by this bolt, otherwise:
                           ;; spout 1 sends synchronization (s1), dies, same spout restarts somewhere else, sends synchronization (s2) and incremental update. s2 and update finish before s1 -> lose the incremental update

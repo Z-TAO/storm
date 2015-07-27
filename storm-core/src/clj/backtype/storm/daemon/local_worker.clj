@@ -220,11 +220,11 @@
       :storm-conf storm-conf
       :topology topology
       :system-topology (system-topology! storm-conf topology)
-      :heartbeat-timer (mk-halting-timer "heartbeat-timer")
-      :refresh-connections-timer (mk-halting-timer "refresh-connections-timer")
-      :refresh-active-timer (mk-halting-timer "refresh-active-timer")
-      :executor-heartbeat-timer (mk-halting-timer "executor-heartbeat-timer")
-      :user-timer (mk-halting-timer "user-timer")
+      ;:heartbeat-timer (mk-halting-timer "heartbeat-timer")
+      ;:refresh-connections-timer (mk-halting-timer "refresh-connections-timer")
+      ;:refresh-active-timer (mk-halting-timer "refresh-active-timer")
+      ;:executor-heartbeat-timer (mk-halting-timer "executor-heartbeat-timer")
+      ;:user-timer (mk-halting-timer "user-timer")
       :task->component (HashMap. (storm-task-info topology storm-conf)) ; for optimized access when used in tasks later on
       :component->stream->fields (component->stream->fields (:system-topology <>))
       :component->sorted-tasks (->> (:task->component <>) reverse-map (map-val sort))

@@ -1036,12 +1036,19 @@
                              topology
                              total-storm-conf
                              executor->node+port)
-                    executors (dofor [e (:executors worker)]
-                                (let [exe (executor/mk-executor worker e)]
-                                  (psim/register-process worker-id exe)
-                                  )
-                                )]
+                    executors (atom nil)]
 
+                (reset! executors (dofor [e (:executors worker)] (executor/mk-executor worker e)))
+                (psim/register-process worker-id (reify
+                                                Shutdownable
+                                                (shutdown
+                                                  [this]
+
+                                                  (doseq [executor @executors] (.shutdown executor))
+                                                  (disruptor/halt-with-interrupt! (:transfer-queue worker))
+
+                                                  )
+                                                ))
                 ))
 
             ;(comment
