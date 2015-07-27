@@ -334,14 +334,14 @@
         handlers (with-error-reaction report-error-and-die
                    (mk-threads executor-data task-datas))
         threads (concat handlers system-threads)]    
-    (setup-ticks! worker executor-data)
+    ;(setup-ticks! worker executor-data)
 
     (log-message "Finished loading executor " component-id ":" (pr-str executor-id))
     ;; TODO: add method here to get rendered stats... have worker call that when heartbeating
     (reify
       RunningExecutor
       (render-stats [this]
-        (stats/render-stats! (:stats executor-data)))
+        ;(stats/render-stats! (:stats executor-data)))
       (get-executor-id [this]
         executor-id )
       Shutdownable
@@ -623,6 +623,8 @@
                 open-or-prepare-was-called?]} executor-data
         rand (Random. (Utils/secureRandomLong))
         tuple-action-fn (fn [task-id ^TupleImpl tuple]
+                          (let [^IBolt bolt-obj (:object task-data)]
+                            (.execute bolt-obj tuple))
                           ;; synchronization needs to be done with a key provided by this bolt, otherwise:
                           ;; spout 1 sends synchronization (s1), dies, same spout restarts somewhere else, sends synchronization (s2) and incremental update. s2 and update finish before s1 -> lose the incremental update
                           ;; TODO: for state sync, need to first send sync messages in a loop and receive tuples until synchronization
@@ -639,21 +641,21 @@
                           
                           ;;(log-message "Received tuple " tuple " at task " task-id)
                           ;; need to do it this way to avoid reflection
-                          (let [stream-id (.getSourceStreamId tuple)]
-                            (condp = stream-id
-                              Constants/METRICS_TICK_STREAM_ID (metrics-tick executor-data (get task-datas task-id) tuple)
-                              (let [task-data (get task-datas task-id)
-                                    ^IBolt bolt-obj (:object task-data)
+                          ;(let [stream-id (.getSourceStreamId tuple)]
+                          ;  (condp = stream-id
+                             ; Constants/METRICS_TICK_STREAM_ID (metrics-tick executor-data (get task-datas task-id) tuple)
+                          ;    (let [ task-data (get task-datas task-id)
+                          ;          ^IBolt bolt-obj (:object task-data)
                                     ;user-context (:user-context task-data)
                                     ;sampler? (sampler)
                                     ;execute-sampler? (execute-sampler)
                                     ;now (if (or sampler? execute-sampler?) (System/currentTimeMillis))
-                                    ]
+                          ;          ]
                                 ;(when sampler?
                                 ;  (.setProcessSampleStartTime tuple now))
                                 ;(when execute-sampler?
                                 ;  (.setExecuteSampleStartTime tuple now))
-                                (.execute bolt-obj tuple)
+                          ;      (.execute bolt-obj tuple)
                                 ;(let [delta (tuple-execute-time-delta! tuple)]
                                 ;  (task/apply-hooks user-context .boltExecute (BoltExecuteInfo. tuple task-id delta))
                                 ;  (when delta
@@ -666,7 +668,8 @@
                                 ;                               (.getSourceComponent tuple)
                                 ;                               (.getSourceStreamId tuple)
                                 ;                               delta)))
-                                ))))]
+                           ;     )))
+                          )]
     
     ;; TODO: can get any SubscribedState objects out of the context now
 
