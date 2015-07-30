@@ -196,8 +196,32 @@
     ([task tuple overflow-buffer]
       (this task tuple (nil? overflow-buffer) overflow-buffer))
     ([task tuple]
-      (this task tuple nil)
+      (this task tuple true nil)
       )))
+
+(defn mk-executor-transfer-fn-tmp [executor]
+  (let [worker (:worker executor)
+        short-executor-receive-queue-map (:short-executor-receive-queue-map worker)
+        task->short-executor (:task->short-executor worker)
+        ]
+    (fn this
+      ([task tuple block? ^List overflow-buffer]
+        (if (and overflow-buffer (not (.isEmpty overflow-buffer)))
+          (.add overflow-buffer [task tuple])
+          (try-cause
+            (disruptor/publish (short-executor-receive-queue-map (.get task->short-executor task)) [task tuple] block?)
+            (catch InsufficientCapacityException e
+              (if overflow-buffer
+                (.add overflow-buffer [task tuple])
+                (throw e))
+              ))))
+      ([task tuple overflow-buffer]
+        (this task tuple (nil? overflow-buffer) overflow-buffer))
+      ([task tuple]
+        (this task tuple true nil)
+        ))
+
+    ))
 
 (defn mk-executor-data [worker executor-id]
   (let [worker-context (worker-context worker)
@@ -205,11 +229,11 @@
         component-id (.getComponentId worker-context (first task-ids))
         storm-conf (normalized-component-conf (:storm-conf worker) worker-context component-id)
         executor-type (executor-type worker-context component-id)
-        batch-transfer->worker (disruptor/disruptor-queue
-                                  (str "executor"  executor-id "-send-queue")
-                                  (storm-conf TOPOLOGY-EXECUTOR-SEND-BUFFER-SIZE)
-                                  :claim-strategy :single-threaded
-                                  :wait-strategy (storm-conf TOPOLOGY-DISRUPTOR-WAIT-STRATEGY))
+        ;batch-transfer->worker (disruptor/disruptor-queue
+        ;                          (str "executor"  executor-id "-send-queue")
+        ;                          (storm-conf TOPOLOGY-EXECUTOR-SEND-BUFFER-SIZE)
+        ;                          :claim-strategy :single-threaded
+        ;                          :wait-strategy (storm-conf TOPOLOGY-DISRUPTOR-WAIT-STRATEGY))
         ]
     (recursive-map
      :worker worker
@@ -224,8 +248,8 @@
      :conf (:conf worker)
      :shared-executor-data (HashMap.)
      :storm-active-atom (atom true)
-     :batch-transfer-queue batch-transfer->worker
-     :transfer-fn (mk-executor-transfer-fn batch-transfer->worker)
+     ;:batch-transfer-queue batch-transfer->worker
+     :transfer-fn (mk-executor-transfer-fn-tmp <>)
      :suicide-fn (:suicide-fn worker)
      ;:storm-cluster-state (cluster/mk-storm-cluster-state (:cluster-state worker))
      :type executor-type
@@ -330,10 +354,10 @@
         ;; starting the batch-transfer->worker ensures that anything publishing to that queue 
         ;; doesn't block (because it's a single threaded queue and the caching/consumer started
         ;; trick isn't thread-safe)
-        system-threads [(start-batch-transfer->worker-handler! worker executor-data)]
+        ;system-threads [(start-batch-transfer->worker-handler! worker executor-data)]
         handlers (with-error-reaction report-error-and-die
                    (mk-threads executor-data task-datas))
-        threads (concat handlers system-threads)
+        threads (concat handlers)
         ]
     ;(setup-ticks! worker executor-data)
 
@@ -400,7 +424,7 @@
         ]
     (disruptor/clojure-handler
       (fn [tuple-batch sequence-id end-of-batch?]
-        (fast-list-iter [[task-id msg] tuple-batch]
+        (let [[task-id msg] tuple-batch]
           (let [^TupleImpl tuple (if (instance? Tuple msg) msg (.deserialize deserializer msg))]
             ;(when debug? (log-message "Processing received message " tuple))
             (if task-id
@@ -462,8 +486,8 @@
         receive-queue (:receive-queue executor-data)
         event-handler (mk-task-receiver executor-data tuple-action-fn)
        ; has-ackers? (has-ackers? storm-conf)
-       ; emitted-count (MutableLong. 0)
-       ; empty-emit-streak (MutableLong. 0)
+        emitted-count (MutableLong. 0)
+        empty-emit-streak (MutableLong. 0)
         
         ;; the overflow buffer is used to ensure that spouts never block when emitting
         ;; this ensures that the spout can always clear the incoming buffer (acks and fails), which
@@ -485,7 +509,7 @@
                 :let [^ISpout spout-obj (:object task-data)
                       tasks-fn (:tasks-fn task-data)
                       send-spout-msg (fn [out-stream-id values message-id out-task-id]
-                                       ;(.increment emitted-count)
+                                       (.increment emitted-count)
                                        (let [out-tasks (if out-task-id
                                                          (tasks-fn out-task-id out-stream-id values)
                                                          (tasks-fn out-stream-id values))
@@ -522,10 +546,10 @@
                                          ;    (ack-spout-msg executor-data task-data message-id
                                          ;                   {:stream out-stream-id :values values}
                                          ;                   (if (sampler) 0))))
-                                         (when message-id
-                                           (ack-spout-msg executor-data task-data message-id
-                                             {:stream out-stream-id :values values}
-                                             (if (sampler) 0)))
+                                         ;(when message-id
+                                         ;  (ack-spout-msg executor-data task-data message-id
+                                         ;    {:stream out-stream-id :values values}
+                                         ;    (if (sampler) 0)))
                                          (or out-tasks [])
                                          ))]]
           ;(builtin-metrics/register-all (:builtin-metrics task-data) storm-conf (:user-context task-data))
@@ -558,7 +582,7 @@
         (fast-list-iter [^ISpout spout spouts] (.activate spout))
         (fn []
           ;; This design requires that spouts be non-blocking
-          (disruptor/consume-batch receive-queue event-handler)
+          ;(disruptor/consume-batch receive-queue event-handler)
           
           ;; try to clear the overflow-buffer
           (try-cause
@@ -568,41 +592,47 @@
                 (.removeFirst overflow-buffer)))
           (catch InsufficientCapacityException e
             ))
-          (if (and (.isEmpty overflow-buffer)
-                (or (not max-spout-pending)
-                  (< (.size pending) max-spout-pending)))
-            (fast-list-iter [^ISpout spout spouts] (.nextTuple spout))
+          (let [curr-count (.get emitted-count)]
+            (if (and (.isEmpty overflow-buffer)
+                  (or (not max-spout-pending)
+                    (< (.size pending) max-spout-pending)))
+              (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
+            (if (= curr-count (.get emitted-count))
+              (do (.increment empty-emit-streak)
+                (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
+              (.set empty-emit-streak 0)
+              )
             )
 
-          (comment
-          (let [active? @(:storm-active-atom executor-data)
-                ;curr-count (.get emitted-count)
-                ]
-            (if (and (.isEmpty overflow-buffer)
-                     (or (not max-spout-pending)
-                         (< (.size pending) max-spout-pending)))
-              (if active?
-                (do
-                  (when-not @last-active
-                    (reset! last-active true)
-                    (log-message "Activating spout " component-id ":" (keys task-datas))
-                    (fast-list-iter [^ISpout spout spouts] (.activate spout)))
-               
-                  (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
-                (do
-                  (when @last-active
-                    (reset! last-active false)
-                    (log-message "Deactivating spout " component-id ":" (keys task-datas))
-                    (fast-list-iter [^ISpout spout spouts] (.deactivate spout)))
-                  ;; TODO: log that it's getting throttled
-                  (Time/sleep 100)
-                  )))
+          ;(comment
+          ;(let [active? @(:storm-active-atom executor-data)
+          ;      ;curr-count (.get emitted-count)
+          ;      ]
+          ;  (if (and (.isEmpty overflow-buffer)
+          ;           (or (not max-spout-pending)
+          ;               (< (.size pending) max-spout-pending)))
+          ;    (if active?
+          ;      (do
+          ;        (when-not @last-active
+          ;          (reset! last-active true)
+          ;          (log-message "Activating spout " component-id ":" (keys task-datas))
+          ;          (fast-list-iter [^ISpout spout spouts] (.activate spout)))
+          ;
+          ;        (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
+          ;      (do
+          ;        (when @last-active
+          ;          (reset! last-active false)
+          ;          (log-message "Deactivating spout " component-id ":" (keys task-datas))
+          ;          (fast-list-iter [^ISpout spout spouts] (.deactivate spout)))
+          ;        ;; TODO: log that it's getting throttled
+          ;        (Time/sleep 100)
+          ;        )))
             ;(if (and (= curr-count (.get emitted-count)) active?)
             ;  (do (.increment empty-emit-streak)
             ;      (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
             ;  (.set empty-emit-streak 0)
             ;  )
-            ))
+          ;  ))
           0))
       :kill-fn (:report-error-and-die executor-data)
       :factory? true
