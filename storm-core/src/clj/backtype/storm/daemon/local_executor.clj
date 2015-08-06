@@ -463,29 +463,29 @@
                        )
                      )))
         tuple-action-fn (fn [task-id ^TupleImpl tuple]
-                          ;(let [stream-id (.getSourceStreamId tuple)]
-                          ;  (condp = stream-id
-                          ;    Constants/SYSTEM_TICK_STREAM_ID (.rotate pending)
-                          ;    Constants/METRICS_TICK_STREAM_ID (metrics-tick executor-data (get task-datas task-id) tuple)
-                          ;    (let [id (.getValue tuple 0)
-                          ;          [stored-task-id spout-id tuple-finished-info start-time-ms] (.remove pending id)]
-                                ;(when spout-id
-                                ;  (when-not (= stored-task-id task-id)
-                                ;    (throw-runtime "Fatal error, mismatched task ids: " task-id " " stored-task-id))
-                                ;  ;(let [time-delta (if start-time-ms (time-delta-ms start-time-ms))]
-                                ;  ;  (condp = stream-id
-                                ;  ;    ACKER-ACK-STREAM-ID (ack-spout-msg executor-data (get task-datas task-id)
-                                ;  ;                                       spout-id tuple-finished-info time-delta)
-                                ;  ;    ACKER-FAIL-STREAM-ID (fail-spout-msg executor-data (get task-datas task-id)
-                                ;  ;                                         spout-id tuple-finished-info time-delta)
-                                ;  ;    ))
-                                ;  )
+                          (let [stream-id (.getSourceStreamId tuple)]
+                            (condp = stream-id
+                              Constants/SYSTEM_TICK_STREAM_ID (.rotate pending)
+                              Constants/METRICS_TICK_STREAM_ID (metrics-tick executor-data (get task-datas task-id) tuple)
+                               (let [id (.getValue tuple 0)
+                                    [stored-task-id spout-id tuple-finished-info start-time-ms] (.remove pending id)]
+                                (when spout-id
+                                  (when-not (= stored-task-id task-id)
+                                    (throw-runtime "Fatal error, mismatched task ids: " task-id " " stored-task-id))
+                                  (let [time-delta (if start-time-ms (time-delta-ms start-time-ms))]
+                                    (condp = stream-id
+                                      ACKER-ACK-STREAM-ID (ack-spout-msg executor-data (get task-datas task-id)
+                                                                         spout-id tuple-finished-info time-delta)
+                                      ACKER-FAIL-STREAM-ID (fail-spout-msg executor-data (get task-datas task-id)
+                                                                           spout-id tuple-finished-info time-delta)
+                                     ))
+                                  )
                                 ;; TODO: on failure, emit tuple to failure stream
-                          ;      )))
+                                )))
                           )
         receive-queue (:receive-queue executor-data)
         event-handler (mk-task-receiver executor-data tuple-action-fn)
-       ; has-ackers? (has-ackers? storm-conf)
+        has-ackers? (has-ackers? storm-conf)
         emitted-count (MutableLong. 0)
         empty-emit-streak (MutableLong. 0)
         
@@ -509,7 +509,7 @@
                 :let [^ISpout spout-obj (:object task-data)
                       tasks-fn (:tasks-fn task-data)
                       send-spout-msg (fn [out-stream-id values message-id out-task-id]
-                                       (.increment emitted-count)
+                                       ;(.increment emitted-count)
                                        (let [out-tasks (if out-task-id
                                                          (tasks-fn out-task-id out-stream-id values)
                                                          (tasks-fn out-stream-id values))
@@ -517,11 +517,11 @@
                                              ;root-id (if rooted? (MessageId/generateId rand))
                                              ;out-ids (fast-list-for [t out-tasks] (if rooted? (MessageId/generateId rand)))
                                              ]
-                                         (fast-list-iter [out-task out-tasks id]
-                                                         (let [
-                                                                ;tuple-id (if rooted?
-                                                                ;          (MessageId/makeRootId root-id id)
-                                                                ;          (MessageId/makeUnanchored))
+                                         (fast-list-iter [out-task out-tasks ;id out-ids
+                                                          ]
+                                                         (let [;tuple-id (if rooted?
+                                                               ;           (MessageId/makeRootId root-id id)
+                                                               ;           (MessageId/makeUnanchored))
                                                                 tuple-id (MessageId/makeUnanchored)
                                                                 out-tuple (TupleImpl. worker-context
                                                                                      values
@@ -576,7 +576,7 @@
         (log-message "Opened spout " component-id ":" (keys task-datas))
         ;(setup-metrics! executor-data)
 
-        (disruptor/consumer-started! (:receive-queue executor-data))
+        ;(disruptor/consumer-started! (:receive-queue executor-data))
 
         (log-message "Activating spout " component-id ":" (keys task-datas))
         (fast-list-iter [^ISpout spout spouts] (.activate spout))
@@ -597,16 +597,15 @@
                   (or (not max-spout-pending)
                     (< (.size pending) max-spout-pending)))
               (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
-            (if (= curr-count (.get emitted-count))
-              (do (.increment empty-emit-streak)
-                (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
-              (.set empty-emit-streak 0)
-              )
+            ;(if (= curr-count (.get emitted-count))
+            ;  (do (.increment empty-emit-streak)
+            ;    (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
+            ;  (.set empty-emit-streak 0)
+            ;  )
             )
 
-          ;(comment
           ;(let [active? @(:storm-active-atom executor-data)
-          ;      ;curr-count (.get emitted-count)
+          ;      curr-count (.get emitted-count)
           ;      ]
           ;  (if (and (.isEmpty overflow-buffer)
           ;           (or (not max-spout-pending)
@@ -616,8 +615,8 @@
           ;        (when-not @last-active
           ;          (reset! last-active true)
           ;          (log-message "Activating spout " component-id ":" (keys task-datas))
-          ;          (fast-list-iter [^ISpout spout spouts] (.activate spout)))
-          ;
+          ;          (fast-list-iter [^ISpout spout spouts] (.activate spout)));;
+;
           ;        (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
           ;      (do
           ;        (when @last-active
@@ -627,12 +626,12 @@
           ;        ;; TODO: log that it's getting throttled
           ;        (Time/sleep 100)
           ;        )))
-            ;(if (and (= curr-count (.get emitted-count)) active?)
-            ;  (do (.increment empty-emit-streak)
-            ;      (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
-            ;  (.set empty-emit-streak 0)
-            ;  )
-          ;  ))
+          ;  (if (and (= curr-count (.get emitted-count)) active?)
+          ;    (do (.increment empty-emit-streak)
+          ;        (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
+          ;    (.set empty-emit-streak 0)
+          ;    )
+          ;  )
           0))
       :kill-fn (:report-error-and-die executor-data)
       :factory? true
