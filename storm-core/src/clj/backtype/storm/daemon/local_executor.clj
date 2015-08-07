@@ -378,11 +378,7 @@
         ;(disruptor/halt-with-interrupt! (:batch-transfer-queue executor-data))
         (doseq [t threads]
           (.interrupt t)
-         ; (.join t)
-          )
-        (doseq [t threads]
-          (.interrupt t)
-           ;(.join t)
+         (.join t)
           )
         (doseq [user-context (map :user-context (vals task-datas))]
           (doseq [hook (.getHooks user-context)]
@@ -402,7 +398,7 @@
     (.fail spout msg-id)
     (task/apply-hooks (:user-context task-data) .spoutFail (SpoutFailInfo. msg-id task-id time-delta))
     (when time-delta
-      (builtin-metrics/spout-failed-tuple! (:builtin-metrics task-data) (:stats executor-data) (:stream tuple-info))      
+      (builtin-metrics/spout-failed-tuple! (:builtin-metrics task-data) (:stats executor-data) (:stream tuple-info))
       (stats/spout-failed-tuple! (:stats executor-data) (:stream tuple-info) time-delta))))
 
 (defn- ack-spout-msg [executor-data task-data msg-id tuple-info time-delta]
@@ -449,11 +445,11 @@
   (let [{:keys [storm-conf component-id worker-context transfer-fn report-error sampler open-or-prepare-was-called?]} executor-data
         ^ISpoutWaitStrategy spout-wait-strategy (init-spout-wait-strategy storm-conf)
         max-spout-pending (executor-max-spout-pending storm-conf (count task-datas))
-        ^Integer max-spout-pending (if max-spout-pending (int max-spout-pending))        
-        last-active (atom false)        
+        ^Integer max-spout-pending (if max-spout-pending (int max-spout-pending))
+        last-active (atom false)
         spouts (ArrayList. (map :object (vals task-datas)))
         rand (Random. (Utils/secureRandomLong))
-        
+
         pending (RotatingMap.
                  2 ;; microoptimize for performance of .size method
                  (reify RotatingMap$ExpiredCallback
@@ -488,22 +484,22 @@
         has-ackers? (has-ackers? storm-conf)
         emitted-count (MutableLong. 0)
         empty-emit-streak (MutableLong. 0)
-        
+
         ;; the overflow buffer is used to ensure that spouts never block when emitting
         ;; this ensures that the spout can always clear the incoming buffer (acks and fails), which
         ;; prevents deadlock from occuring across the topology (e.g. Spout -> Bolt -> Acker -> Spout, and all
         ;; buffers filled up)
         ;; when the overflow buffer is full, spouts stop calling nextTuple until it's able to clear the overflow buffer
-        ;; this limits the size of the overflow buffer to however many tuples a spout emits in one call of nextTuple, 
+        ;; this limits the size of the overflow buffer to however many tuples a spout emits in one call of nextTuple,
         ;; preventing memory issues
         overflow-buffer (LinkedList.)]
-   
+
     [(async-loop
       (fn []
         ;; If topology was started in inactive state, don't call (.open spout) until it's activated first.
         (while (not @(:storm-active-atom executor-data))
           (Thread/sleep 100))
-        
+
         (log-message "Opening spout " component-id ":" (keys task-datas))
         (doseq [[task-id task-data] task-datas
                 :let [^ISpout spout-obj (:object task-data)
@@ -572,66 +568,67 @@
                     (reportError [this error]
                       (report-error error)
                       )))))
-        (reset! open-or-prepare-was-called? true) 
+        (reset! open-or-prepare-was-called? true)
         (log-message "Opened spout " component-id ":" (keys task-datas))
         ;(setup-metrics! executor-data)
 
-        ;(disruptor/consumer-started! (:receive-queue executor-data))
+        (disruptor/consumer-started! (:receive-queue executor-data))
 
         (log-message "Activating spout " component-id ":" (keys task-datas))
         (fast-list-iter [^ISpout spout spouts] (.activate spout))
         (fn []
           ;; This design requires that spouts be non-blocking
-          ;(disruptor/consume-batch receive-queue event-handler)
+          (disruptor/consume-batch receive-queue event-handler)
           
           ;; try to clear the overflow-buffer
-          (try-cause
-            (while (not (.isEmpty overflow-buffer))
-              (let [[out-task out-tuple] (.peek overflow-buffer)]
-                (transfer-fn out-task out-tuple false nil)
-                (.removeFirst overflow-buffer)))
-          (catch InsufficientCapacityException e
-            ))
-          (let [curr-count (.get emitted-count)]
-            (if (and (.isEmpty overflow-buffer)
-                  (or (not max-spout-pending)
-                    (< (.size pending) max-spout-pending)))
-              (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
+          ;(try-cause
+          ;  (while (not (.isEmpty overflow-buffer))
+          ;    (let [[out-task out-tuple] (.peek overflow-buffer)]
+          ;      (transfer-fn out-task out-tuple false nil)
+          ;      (.removeFirst overflow-buffer)))
+          ;(catch InsufficientCapacityException e
+          ;  ))
+          ;(let [curr-count (.get emitted-count)]
+          ;  (if (and (.isEmpty overflow-buffer)
+          ;        (or (not max-spout-pending)
+          ;          (< (.size pending) max-spout-pending)))
+          ;    (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
             ;(if (= curr-count (.get emitted-count))
             ;  (do (.increment empty-emit-streak)
             ;    (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
             ;  (.set empty-emit-streak 0)
             ;  )
-            )
+           ; )
 
-          ;(let [active? @(:storm-active-atom executor-data)
-          ;      curr-count (.get emitted-count)
-          ;      ]
-          ;  (if (and (.isEmpty overflow-buffer)
-          ;           (or (not max-spout-pending)
-          ;               (< (.size pending) max-spout-pending)))
-          ;    (if active?
-          ;      (do
-          ;        (when-not @last-active
-          ;          (reset! last-active true)
-          ;          (log-message "Activating spout " component-id ":" (keys task-datas))
-          ;          (fast-list-iter [^ISpout spout spouts] (.activate spout)));;
-;
-          ;        (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
-          ;      (do
-          ;        (when @last-active
-          ;          (reset! last-active false)
-          ;          (log-message "Deactivating spout " component-id ":" (keys task-datas))
-          ;          (fast-list-iter [^ISpout spout spouts] (.deactivate spout)))
-          ;        ;; TODO: log that it's getting throttled
-          ;        (Time/sleep 100)
-          ;        )))
-          ;  (if (and (= curr-count (.get emitted-count)) active?)
-          ;    (do (.increment empty-emit-streak)
-          ;        (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
-          ;    (.set empty-emit-streak 0)
-          ;    )
-          ;  )
+          (let [active? @(:storm-active-atom executor-data)
+                curr-count (.get emitted-count)
+                ]
+            (if (and (.isEmpty overflow-buffer)
+                     (or (not max-spout-pending)
+                         (< (.size pending) max-spout-pending)))
+              (if active?
+                (do
+                  (when-not @last-active
+                    (reset! last-active true)
+                    (log-message "Activating spout " component-id ":" (keys task-datas))
+                    (fast-list-iter [^ISpout spout spouts] (.activate spout)));;
+
+                  (fast-list-iter [^ISpout spout spouts] (.nextTuple spout)))
+                (do
+                  (when @last-active
+                    (reset! last-active false)
+
+                    (log-message "Deactivating spout " component-id ":" (keys task-datas))
+                    (fast-list-iter [^ISpout spout spouts] (.deactivate spout)))
+                  ;; TODO: log that it's getting throttled
+                  (Time/sleep 100)
+                  )))
+            (if (and (= curr-count (.get emitted-count)) active?)
+              (do (.increment empty-emit-streak)
+                  (.emptyEmit spout-wait-strategy (.get empty-emit-streak)))
+              (.set empty-emit-streak 0)
+              )
+            )
           0))
       :kill-fn (:report-error-and-die executor-data)
       :factory? true
