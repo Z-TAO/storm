@@ -464,9 +464,9 @@
                               Constants/METRICS_TICK_STREAM_ID (metrics-tick executor-data (get task-datas task-id) tuple)
                               (let [id (.getValue tuple 0)
                                     [stored-task-id spout-id tuple-finished-info start-time-ms] (.remove pending id)]
-                                (when spout-id
-                                  (when-not (= stored-task-id task-id)
-                                    (throw-runtime "Fatal error, mismatched task ids: " task-id " " stored-task-id))
+                                ;(when spout-id
+                                ;  (when-not (= stored-task-id task-id)
+                                ;    (throw-runtime "Fatal error, mismatched task ids: " task-id " " stored-task-id))
                                   ;(let [time-delta (if start-time-ms (time-delta-ms start-time-ms))]
                                   ;  (condp = stream-id
                                   ;    ACKER-ACK-STREAM-ID (ack-spout-msg executor-data (get task-datas task-id)
@@ -474,7 +474,7 @@
                                   ;    ACKER-FAIL-STREAM-ID (fail-spout-msg executor-data (get task-datas task-id)
                                   ;                           spout-id tuple-finished-info time-delta)
                                   ;    ))
-                                  )
+                                ;  )
                                 ;; TODO: on failure, emit tuple to failure stream
                                 ))))
         receive-queue (:receive-queue executor-data)
