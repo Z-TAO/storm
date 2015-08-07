@@ -522,20 +522,20 @@
                                                 out-tuple
                                                 overflow-buffer)
                                               ))
-                                          (if rooted?
-                                            (do
-                                              (.put pending root-id [task-id
-                                                                     message-id
-                                                                     {:stream out-stream-id :values values}
-                                                                     (if (sampler) (System/currentTimeMillis))])
-                                              (task/send-unanchored task-data
-                                                ACKER-INIT-STREAM-ID
-                                                [root-id (bit-xor-vals out-ids) task-id]
-                                                overflow-buffer))
-                                            (when message-id
-                                              (ack-spout-msg executor-data task-data message-id
-                                                {:stream out-stream-id :values values}
-                                                (if (sampler) 0))))
+                                          ;(if rooted?
+                                          ;  (do
+                                          ;    (.put pending root-id [task-id
+                                          ;                           message-id
+                                          ;                           {:stream out-stream-id :values values}
+                                          ;                           (if (sampler) (System/currentTimeMillis))])
+                                          ;    (task/send-unanchored task-data
+                                          ;      ACKER-INIT-STREAM-ID
+                                          ;      [root-id (bit-xor-vals out-ids) task-id]
+                                          ;      overflow-buffer))
+                                          ;  (when message-id
+                                          ;    (ack-spout-msg executor-data task-data message-id
+                                          ;      {:stream out-stream-id :values values}
+                                          ;      (if (sampler) 0))))
                                           (or out-tasks [])
                                           ))]]
            ;(builtin-metrics/register-all (:builtin-metrics task-data) storm-conf (:user-context task-data))
